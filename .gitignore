@@ -1,9 +1,5 @@
-.depend
-.settings
-.project
-.cproject
-/kern/compile/
-defs.mk
 build
-/user/testbin/randcall/calls.c
-*.swp
+.depend
+/defs.mk
+kern/compile/
+user/testbin/randcall/calls.c
