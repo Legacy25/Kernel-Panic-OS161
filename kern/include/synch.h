@@ -150,8 +150,7 @@ struct rwlock {
        	volatile int rwlock_rdlk_count;
         volatile int rwlock_wrlk_count;
 
-        struct spinlock rwlock_wr_lock;
-        struct spinlock rwlock_rd_lock;
+        struct spinlock rwlock_lock;
 };
 
 struct rwlock * rwlock_create(const char *);
