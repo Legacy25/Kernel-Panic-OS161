@@ -115,8 +115,6 @@ void lock_destroy(struct lock *);
 struct cv {
         char *cv_name;
         struct wchan *cv_wchan;
-        // add what you need here
-        // (don't forget to mark things volatile as needed)
 };
 
 struct cv *cv_create(const char *name);
@@ -145,6 +143,17 @@ void cv_broadcast(struct cv *cv, struct lock *lock);
 
 struct rwlock {
         char *rwlock_name;
+
+        struct wchan *rwlock_rd_wchan;
+        struct wchan *rwlock_wr_wchan;
+
+       	volatile int rwlock_rdlk_count;
+        volatile int rwlock_wrlk_count;
+
+        struct spinlock rwlock_wr_lock;
+        struct spinlock rwlock_rd_lock;
+
+        bool rwlock_pending_write;
 };
 
 struct rwlock * rwlock_create(const char *);
