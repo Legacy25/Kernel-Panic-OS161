@@ -152,8 +152,6 @@ struct rwlock {
 
         struct spinlock rwlock_wr_lock;
         struct spinlock rwlock_rd_lock;
-
-        bool rwlock_pending_write;
 };
 
 struct rwlock * rwlock_create(const char *);
