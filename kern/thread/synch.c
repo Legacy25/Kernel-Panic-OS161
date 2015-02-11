@@ -170,8 +170,9 @@ lock_create(const char *name)
 			return NULL;
 		}
 
+		lock->lk_holder = NULL;
+
 		spinlock_init(&lock->lk_lock);
-        lock->lk_count = 1;
 
         return lock;
 }
@@ -180,6 +181,7 @@ void
 lock_destroy(struct lock *lock)
 {
         KASSERT(lock != NULL);
+        KASSERT(lock->lk_holder == NULL);
 
         /* wchan_cleanup will assert if anyone's waiting on it */
        	spinlock_cleanup(&lock->lk_lock);
@@ -193,21 +195,19 @@ lock_acquire(struct lock *lock)
 {
 		KASSERT(lock != NULL);
 		KASSERT(curthread->t_in_interrupt == false);
-		KASSERT(lock->lk_count >= 0);
-		KASSERT(lock->lk_count <= 1);
+		KASSERT(!lock_do_i_hold(lock));
 
 		spinlock_acquire(&lock->lk_lock);
-        while (lock->lk_count == 0) {
+        while (lock->lk_holder != NULL) {
 			wchan_lock(lock->lk_wchan);
 			spinlock_release(&lock->lk_lock);
 		    wchan_sleep(lock->lk_wchan);
 
 			spinlock_acquire(&lock->lk_lock);
-	    }
-	    KASSERT(lock->lk_count == 1);
-	    lock->lk_count--;
-	    KASSERT(lock->lk_count == 0);
-	    lock->lk_holder = kstrdup(curthread->t_name);
+        }
+
+	    lock->lk_holder = curthread;
+	    KASSERT(lock_do_i_hold(lock));
 		spinlock_release(&lock->lk_lock);
 
 }
@@ -219,10 +219,9 @@ lock_release(struct lock *lock)
 
     	spinlock_acquire(&lock->lk_lock);
 
-    	KASSERT(lock->lk_count == 0);
-    	lock->lk_count++;
-    	KASSERT(lock->lk_count == 1);
+    	KASSERT(lock_do_i_hold(lock));
     	lock->lk_holder = NULL;
+
     	wchan_wakeone(lock->lk_wchan);
 
     	spinlock_release(&lock->lk_lock);
@@ -233,7 +232,7 @@ lock_do_i_hold(struct lock *lock)
 {
         if(lock->lk_holder == NULL)
         	return false;
-        else if(strcmp(lock->lk_holder, curthread->t_name) == 0)
+        else if(lock->lk_holder == curthread)
         	return true;
 
         return false;
