@@ -399,9 +399,9 @@ cpu_hatch(unsigned software_number)
 	KASSERT(curthread != NULL);
 	KASSERT(curcpu->c_number == software_number);
 
-	kprintf("cpu%u: %s\n", software_number, cpu_identify());
-
 	spl0();
+
+	kprintf("cpu%u: %s\n", software_number, cpu_identify());
 
 	V(cpu_startup_sem);
 	thread_exit();
