@@ -337,7 +337,7 @@ rwlock_create(const char *name)
 
 	spinlock_init(&rw->rwlock_lock);
 
-    rw->rwlock_rdlk_count = 4;
+    rw->rwlock_rdlk_count = 15;
     rw->rwlock_wrlk_count = 1;
 
     return rw;
