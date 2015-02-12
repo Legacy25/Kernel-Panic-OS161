@@ -50,6 +50,7 @@ static struct semaphore *testsem;
 static struct lock *testlock;
 static struct cv *testcv;
 static struct semaphore *donesem;
+static struct rwlock *rw;
 
 static
 void
@@ -77,6 +78,12 @@ inititems(void)
 		donesem = sem_create("donesem", 0);
 		if (donesem == NULL) {
 			panic("synchtest: sem_create failed\n");
+		}
+	}
+	if (rw==NULL) {
+		rw = rwlock_create("rwlock");
+		if (rw == NULL) {
+			panic("synchtest: rwlock_create failed\n");
 		}
 	}
 }
@@ -356,4 +363,68 @@ cvtest2(int nargs, char **args)
 	kprintf("CV test done\n");
 
 	return 0;
+}
+
+
+
+
+static
+void
+rwtestthread(void *junk, unsigned long num)
+{
+	(void)junk;
+
+	int testval = 7;
+	bool writer = false;
+
+	if(num % 4 == 0)
+		writer = true;
+
+	if(writer) {
+		rwlock_acquire_write(rw);
+		kprintf("Writer thread %lu decrementing value\n", num);
+		testval--;
+		rwlock_release_write(rw);
+	}
+	else {
+		rwlock_acquire_read(rw);
+		kprintf("Reader thread %lu reads value %d\n", num, testval);
+		rwlock_release_read(rw);
+	}
+
+	V(donesem);
+}
+
+int
+rwlocktest(int nargs, char **args)
+{
+	int i, result;
+
+	(void)nargs;
+	(void)args;
+
+	inititems();
+
+	kprintf("Starting RW Lock test...\n");
+
+	for (i=0; i<NTHREADS; i++) {
+		if(i%4 == 0)
+			result = thread_fork("writer", rwtestthread, NULL, i, NULL);
+		else
+			result = thread_fork("reader", rwtestthread, NULL, i, NULL);
+
+		if (result) {
+			panic("rwtest: thread_fork failed: %s\n",
+				  strerror(result));
+		}
+	}
+
+	for (i=0; i<NTHREADS; i++) {
+		P(donesem);
+	}
+
+	kprintf("RW test done\n");
+
+	return 0;
+
 }

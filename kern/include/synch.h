@@ -34,7 +34,7 @@
  * Header file for synchronization primitives.
  */
 
-
+#include <types.h>
 #include <spinlock.h>
 
 /*
@@ -141,6 +141,11 @@ void cv_broadcast(struct cv *cv, struct lock *lock);
  * 13 Feb 2012 : GWA : Reader-writer locks.
  */
 
+#define RW_MODE_READ 0
+#define RW_MODE_WRITES_WAITING 1
+#define RW_MODE_WRITE 2
+#define RW_MIN_READ_THREADS 4
+
 struct rwlock {
         char *rwlock_name;
 
@@ -151,6 +156,9 @@ struct rwlock {
         volatile int rwlock_wrlk_count;
 
         struct spinlock rwlock_lock;
+
+        uint8_t rwlock_mode;
+        uint8_t rwlock_rd_threads_serviced;
 };
 
 struct rwlock * rwlock_create(const char *);

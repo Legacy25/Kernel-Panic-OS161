@@ -337,8 +337,11 @@ rwlock_create(const char *name)
 
 	spinlock_init(&rw->rwlock_lock);
 
-    rw->rwlock_rdlk_count = 2;
+    rw->rwlock_rdlk_count = 0;
     rw->rwlock_wrlk_count = 1;
+
+    rw->rwlock_mode = RW_MODE_READ;
+    rw->rwlock_rd_threads_serviced = 0;
 
     return rw;
 }
@@ -346,8 +349,8 @@ rwlock_create(const char *name)
 void
 rwlock_destroy(struct rwlock *rw)
 {
-	//KASSERT(rw->rwlock_wrlk_count == 1);
-	//KASSERT(rw->rwlock_rdlk_count == 0);
+	KASSERT(rw->rwlock_wrlk_count == 1);
+	KASSERT(rw->rwlock_rdlk_count == 6);
 
 	spinlock_cleanup(&rw->rwlock_lock);
 
@@ -363,7 +366,8 @@ rwlock_acquire_read(struct rwlock *rw)
 {
 	spinlock_acquire(&rw->rwlock_lock);
 
-	while(rw->rwlock_wrlk_count == 0 || !wchan_isempty(rw->rwlock_wr_wchan)) {
+	while(rw->rwlock_mode == RW_MODE_WRITES_WAITING &&
+			rw->rwlock_rd_threads_serviced > RW_MIN_READ_THREADS) {
 		wchan_lock(rw->rwlock_rd_wchan);
 		spinlock_release(&rw->rwlock_lock);
 		wchan_sleep(rw->rwlock_rd_wchan);
@@ -371,10 +375,16 @@ rwlock_acquire_read(struct rwlock *rw)
 		spinlock_acquire(&rw->rwlock_lock);
 	}
 
+	while(rw->rwlock_mode == RW_MODE_WRITE) {
+		wchan_lock(rw->rwlock_rd_wchan);
+		spinlock_release(&rw->rwlock_lock);
+		wchan_sleep(rw->rwlock_rd_wchan);
 
-	KASSERT(rw->rwlock_rdlk_count >= 0);
+		spinlock_acquire(&rw->rwlock_lock);
+	}
 
-	rw->rwlock_rdlk_count--;
+	rw->rwlock_rdlk_count++;
+	rw->rwlock_rd_threads_serviced++;
 
 	spinlock_release(&rw->rwlock_lock);
 
@@ -385,13 +395,11 @@ rwlock_release_read(struct rwlock *rw)
 {
 	spinlock_acquire(&rw->rwlock_lock);
 
-	//KASSERT(rw->rwlock_rdlk_count >= 1);
-	rw->rwlock_rdlk_count++;
-	//KASSERT(rw->rwlock_rdlk_count >= 0);
+	rw->rwlock_rdlk_count--;
+	KASSERT(rw->rwlock_rdlk_count >= 0);
 
-	if(rw->rwlock_rdlk_count == 0 && !wchan_isempty(rw->rwlock_wr_wchan)) {
+	if(rw->rwlock_mode == RW_MODE_WRITES_WAITING && rw->rwlock_rdlk_count == 0)
 		wchan_wakeone(rw->rwlock_wr_wchan);
-	}
 
 	spinlock_release(&rw->rwlock_lock);
 }
@@ -401,18 +409,20 @@ rwlock_acquire_write(struct rwlock *rw)
 {
 	spinlock_acquire(&rw->rwlock_lock);
 
-	while(rw->rwlock_wrlk_count == 0 || rw->rwlock_rdlk_count > 0) {
+	rw->rwlock_mode = RW_MODE_WRITES_WAITING;
+
+	while(rw->rwlock_rdlk_count != 0 || rw->rwlock_wrlk_count == 0) {
 		wchan_lock(rw->rwlock_wr_wchan);
-
 		spinlock_release(&rw->rwlock_lock);
-
 		wchan_sleep(rw->rwlock_wr_wchan);
 
 		spinlock_acquire(&rw->rwlock_lock);
 	}
 
 	KASSERT(rw->rwlock_wrlk_count == 1);
+	rw->rwlock_mode = RW_MODE_WRITE;
 	rw->rwlock_wrlk_count--;
+
 	KASSERT(rw->rwlock_wrlk_count == 0);
 
 	spinlock_release(&rw->rwlock_lock);
@@ -426,6 +436,14 @@ rwlock_release_write(struct rwlock *rw)
 	KASSERT(rw->rwlock_wrlk_count == 0);
 	rw->rwlock_wrlk_count++;
 	KASSERT(rw->rwlock_wrlk_count == 1);
+
+	rw->rwlock_rd_threads_serviced = 0;
+	if(!wchan_isempty(rw->rwlock_wr_wchan)) {
+		rw->rwlock_mode = RW_MODE_WRITES_WAITING;
+	}
+	else {
+		rw->rwlock_mode = RW_MODE_READ;
+	}
 
 	if(!wchan_isempty(rw->rwlock_rd_wchan))
 		wchan_wakeall(rw->rwlock_rd_wchan);
