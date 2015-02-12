@@ -47,7 +47,14 @@
 // functions will allow you to do local initialization. They are called at
 // the top of the corresponding driver code.
 
+struct semaphore *whl_male;
+struct semaphore *whl_female;
+struct semaphore *whl_matchmkr;
+
 void whalemating_init() {
+	whl_male = sem_create("male_whale", 0);
+	whl_female = sem_create("female_whale", 0);
+	whl_matchmkr = sem_create("matchmaker_whale", 0);
   return;
 }
 
@@ -55,6 +62,9 @@ void whalemating_init() {
 // care if your problems leak memory, but if you do, use this to clean up.
 
 void whalemating_cleanup() {
+	sem_destroy(whl_male);
+	sem_destroy(whl_female);
+	sem_destroy(whl_matchmkr);
   return;
 }
 
@@ -66,6 +76,7 @@ male(void *p, unsigned long which)
   
   male_start();
 	// Implement this function 
+  P(whl_male);
   male_end();
 
   // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
@@ -82,6 +93,7 @@ female(void *p, unsigned long which)
   
   female_start();
 	// Implement this function 
+  P(whl_female);
   female_end();
   
   // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
@@ -98,6 +110,10 @@ matchmaker(void *p, unsigned long which)
   
   matchmaker_start();
 	// Implement this function 
+  V(whl_male);
+  V(whl_female);
+  V(whl_matchmkr);
+  P(whl_matchmkr);
   matchmaker_end();
   
   // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
