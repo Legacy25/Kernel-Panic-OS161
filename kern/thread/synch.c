@@ -350,7 +350,7 @@ void
 rwlock_destroy(struct rwlock *rw)
 {
 	KASSERT(rw->rwlock_wrlk_count == 1);
-	KASSERT(rw->rwlock_rdlk_count == 0);
+	KASSERT(rw->rwlock_rdlk_count == 6);
 
 	spinlock_cleanup(&rw->rwlock_lock);
 
