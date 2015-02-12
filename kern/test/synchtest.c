@@ -367,6 +367,7 @@ cvtest2(int nargs, char **args)
 
 
 
+volatile int rwtestval = 7;
 
 static
 void
@@ -374,21 +375,21 @@ rwtestthread(void *junk, unsigned long num)
 {
 	(void)junk;
 
-	volatile int testval = 7;
 	bool writer = false;
 
-	if(num % 4 == 0)
+	if((num+1) % 4 == 0)
 		writer = true;
 
 	if(writer) {
 		rwlock_acquire_write(rw);
-		testval--;
-		kprintf("Writer thread %lu decrementing value to %d\n", num, testval);
+		rwtestval--;
+		kprintf("Writer thread %lu decrementing value to %d\n", num, rwtestval);
+		thread_yield();
 		rwlock_release_write(rw);
 	}
 	else {
 		rwlock_acquire_read(rw);
-		kprintf("Reader thread %lu reads value %d\n", num, testval);
+		kprintf("Reader thread %lu reads value %d\n", num, rwtestval);
 		rwlock_release_read(rw);
 	}
 
