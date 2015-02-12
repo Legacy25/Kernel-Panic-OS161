@@ -374,7 +374,7 @@ rwtestthread(void *junk, unsigned long num)
 {
 	(void)junk;
 
-	int testval = 7;
+	volatile int testval = 7;
 	bool writer = false;
 
 	if(num % 4 == 0)
@@ -382,8 +382,8 @@ rwtestthread(void *junk, unsigned long num)
 
 	if(writer) {
 		rwlock_acquire_write(rw);
-		kprintf("Writer thread %lu decrementing value\n", num);
 		testval--;
+		kprintf("Writer thread %lu decrementing value to %d\n", num, testval);
 		rwlock_release_write(rw);
 	}
 	else {
