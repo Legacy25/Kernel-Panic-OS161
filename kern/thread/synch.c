@@ -337,7 +337,7 @@ rwlock_create(const char *name)
 
 	spinlock_init(&rw->rwlock_lock);
 
-    rw->rwlock_rdlk_count = 0;
+    rw->rwlock_rdlk_count = 10;
     rw->rwlock_wrlk_count = 1;
 
     return rw;
@@ -346,8 +346,8 @@ rwlock_create(const char *name)
 void
 rwlock_destroy(struct rwlock *rw)
 {
-	KASSERT(rw->rwlock_wrlk_count == 1);
-	KASSERT(rw->rwlock_rdlk_count == 0);
+	//KASSERT(rw->rwlock_wrlk_count == 1);
+	//KASSERT(rw->rwlock_rdlk_count == 0);
 
 	spinlock_cleanup(&rw->rwlock_lock);
 
@@ -374,7 +374,7 @@ rwlock_acquire_read(struct rwlock *rw)
 
 	KASSERT(rw->rwlock_rdlk_count >= 0);
 
-	rw->rwlock_rdlk_count++;
+	rw->rwlock_rdlk_count--;
 
 	spinlock_release(&rw->rwlock_lock);
 
@@ -385,9 +385,9 @@ rwlock_release_read(struct rwlock *rw)
 {
 	spinlock_acquire(&rw->rwlock_lock);
 
-	KASSERT(rw->rwlock_rdlk_count >= 1);
-	rw->rwlock_rdlk_count--;
-	KASSERT(rw->rwlock_rdlk_count >= 0);
+	//KASSERT(rw->rwlock_rdlk_count >= 1);
+	rw->rwlock_rdlk_count++;
+	//KASSERT(rw->rwlock_rdlk_count >= 0);
 
 	if(rw->rwlock_rdlk_count == 0 && !wchan_isempty(rw->rwlock_wr_wchan)) {
 		wchan_wakeone(rw->rwlock_wr_wchan);
