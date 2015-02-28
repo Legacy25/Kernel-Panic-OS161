@@ -1,6 +1,6 @@
 #!/bin/bash
 
-default=ASST1
+default=ASST2
 
 if [ $# -eq 0 ]
 then
