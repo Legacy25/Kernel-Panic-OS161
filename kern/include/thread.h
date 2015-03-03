@@ -26,7 +26,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
+#include <limits.h>
 #ifndef _THREAD_H_
 #define _THREAD_H_
 
@@ -112,6 +112,7 @@ struct thread {
 	struct vnode *t_cwd;		/* current working directory */
 
 	/* add more here as needed */
+	struct file_desc* fd_table[OPEN_MAX]; //need to replace by OPEN_MAX
 };
 
 /* Call once during system startup to allocate data structures. */
