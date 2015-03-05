@@ -221,10 +221,17 @@ index 0f773bd..342110b 100644
  		kprintf("Unknown syscall %d\n", callno);
  		err = ENOSYS;
 diff --git a/kern/conf/conf.kern b/kern/conf/conf.kern
-index d527f61..938c4f2 100644
+index d527f61..de00eaa 100644
 --- a/kern/conf/conf.kern
 +++ b/kern/conf/conf.kern
-@@ -367,6 +367,7 @@ file      vfs/devnull.c
+@@ -361,12 +361,13 @@ file      vfs/devnull.c
+ #
+ # System call layer
+ # (You will probably want to add stuff here while doing the basic system
+-# calls assignment.)
++# calls assignment.)l
+ #
+ 
  file      syscall/loadelf.c
  file      syscall/runprogram.c
  file      syscall/time_syscalls.c
@@ -2139,9 +2146,31 @@ index 9a7468c..e93ab5a 100644
 +
 +	spinlock_release(&rw->rwlock_lock);
 +}
+diff --git a/kern/thread/thread.c b/kern/thread/thread.c
+index e7235e3..76bd781 100644
+--- a/kern/thread/thread.c
++++ b/kern/thread/thread.c
+@@ -153,7 +153,8 @@ thread_create(const char *name)
+ 	thread->t_cwd = NULL;
+ 
+ 	/* If you add to struct thread, be sure to initialize here */
+-
++	for (int i=0;i<OPEN_MAX;i++)
++		thread->fd_table[i] = NULL;
+ 	return thread;
+ }
+ 
+@@ -263,6 +264,7 @@ thread_destroy(struct thread *thread)
+ 	thread->t_wchan_name = "DESTROYED";
+ 
+ 	kfree(thread->t_name);
++	kfree(thread->fd_table);
+ 	kfree(thread);
+ }
+ 
 diff --git a/submit.patch b/submit.patch
 new file mode 100644
-index 0000000..0027bd9
+index 0000000..0edf3c2
 --- /dev/null
 +++ b/submit.patch
 @@ -0,0 +1,2111 @@
@@ -2368,10 +2397,17 @@ index 0000000..0027bd9
 + 		kprintf("Unknown syscall %d\n", callno);
 + 		err = ENOSYS;
 +diff --git a/kern/conf/conf.kern b/kern/conf/conf.kern
-+index d527f61..938c4f2 100644
++index d527f61..de00eaa 100644
 +--- a/kern/conf/conf.kern
 ++++ b/kern/conf/conf.kern
-+@@ -367,6 +367,7 @@ file      vfs/devnull.c
++@@ -361,12 +361,13 @@ file      vfs/devnull.c
++ #
++ # System call layer
++ # (You will probably want to add stuff here while doing the basic system
++-# calls assignment.)
+++# calls assignment.)l
++ #
++ 
 + file      syscall/loadelf.c
 + file      syscall/runprogram.c
 + file      syscall/time_syscalls.c
@@ -4248,14 +4284,7 @@ index 0000000..0027bd9
 ++	while(rw->rwlock_rdlk_count != 0 || rw->rwlock_wrlk_count == 0) {
 ++		wchan_lock(rw->rwlock_wr_wchan);
 ++		spinlock_release(&rw->rwlock_lock);
-++		wchan_sleep(rw->rwlock_wr_wchan);
-++
-++		spinlock_acquire(&rw->rwlock_lock);
-++	}
-++
-++	KASSERT(rw->rwlock_wrlk_count == 1);
-++	rw->rwlock_mode = RW_MODE_WRITE;
-++	rw->rwlo
+++		wchan_sleep(rw->rwlock
 \ No newline at end of file
 diff --git a/submit_my.patch b/submit_my.patch
 new file mode 100644
