@@ -361,7 +361,7 @@ file      vfs/devnull.c
 #
 # System call layer
 # (You will probably want to add stuff here while doing the basic system
-# calls assignment.)
+# calls assignment.)l
 #
 
 file      syscall/loadelf.c

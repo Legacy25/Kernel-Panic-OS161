@@ -153,7 +153,8 @@ thread_create(const char *name)
 	thread->t_cwd = NULL;
 
 	/* If you add to struct thread, be sure to initialize here */
-
+	for (int i=0;i<OPEN_MAX;i++)
+		thread->fd_table[i] = NULL;
 	return thread;
 }
 
@@ -263,6 +264,7 @@ thread_destroy(struct thread *thread)
 	thread->t_wchan_name = "DESTROYED";
 
 	kfree(thread->t_name);
+	kfree(thread->fd_table);
 	kfree(thread);
 }
 
