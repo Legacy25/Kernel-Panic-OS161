@@ -153,6 +153,11 @@ thread_create(const char *name)
 	thread->t_cwd = NULL;
 
 	/* If you add to struct thread, be sure to initialize here */
+	thread->t_pid = 0;
+	thread->t_ppid = -1;
+
+	thread->t_exited = false;
+	thread->t_exitcode = 0;
 
 	return thread;
 }
@@ -240,6 +245,9 @@ thread_destroy(struct thread *thread)
 {
 	KASSERT(thread != curthread);
 	KASSERT(thread->t_state != S_RUN);
+
+
+	thread_reclaimpid(thread);
 
 	/*
 	 * If you add things to struct thread, be sure to clean them up
@@ -483,11 +491,19 @@ thread_fork(const char *name,
 	    struct thread **ret)
 {
 	struct thread *newthread;
+	int result;
 
 	newthread = thread_create(name);
 	if (newthread == NULL) {
 		return ENOMEM;
 	}
+
+	result = thread_assignpid(newthread);
+	if(result) {
+		return result;
+	}
+
+
 
 	/* Allocate a stack */
 	newthread->t_stack = kmalloc(STACK_SIZE);
@@ -793,6 +809,7 @@ thread_exit(void)
 	struct thread *cur;
 
 	cur = curthread;
+	cur->t_exited = true;
 
 	/* VFS fields */
 	if (cur->t_cwd) {
@@ -1227,4 +1244,40 @@ interprocessor_interrupt(void)
 
 	curcpu->c_ipi_pending = 0;
 	spinlock_release(&curcpu->c_ipi_lock);
+}
+
+
+
+
+/*
+ * PID related functions
+ */
+
+static struct thread* processtable[MAX_PROCESSES] = { NULL };
+
+int thread_assignpid(struct thread *thrd) {
+
+	int i;
+
+	for(i=1; i<MAX_PROCESSES; i++) {
+		if(!processtable[i]) {
+			processtable[i] = thrd;
+			thrd->t_pid = i;
+			return 0;
+		}
+	}
+
+	return ENPROC;
+
+}
+
+void thread_reclaimpid(struct thread *thrd) {
+
+	int i;
+
+	for(i=1; i<MAX_PROCESSES; i++) {
+		if(processtable[i] == thrd) {
+			processtable[i] = NULL;
+		}
+	}
 }

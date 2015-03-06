@@ -56,6 +56,12 @@ struct vnode;
 /* Macro to test if two addresses are on the same kernel stack */
 #define SAME_STACK(p1, p2)     (((p1) & STACK_MASK) == ((p2) & STACK_MASK))
 
+/* Maximum number of threads/processes */
+#define MAX_PROCESSES 256
+
+/* Maximum number of open file handles */
+#define MAX_FILES 256
+
 
 /* States a thread can be in. */
 typedef enum {
@@ -112,6 +118,12 @@ struct thread {
 	struct vnode *t_cwd;		/* current working directory */
 
 	/* add more here as needed */
+	pid_t t_pid;					/* Process ID */
+	pid_t t_ppid;					/* Parent's process ID */
+
+	bool t_exited;					/* Exited or not? */
+	int t_exitcode;					/* Exit code */
+
 };
 
 /* Call once during system startup to allocate data structures. */
@@ -164,5 +176,8 @@ void schedule(void);
  */
 void thread_consider_migration(void);
 
+
+int thread_assignpid(struct thread *thrd);
+void thread_reclaimpid(struct thread *thrd);
 
 #endif /* _THREAD_H_ */

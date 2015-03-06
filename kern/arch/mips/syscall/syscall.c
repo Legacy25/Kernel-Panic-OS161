@@ -35,6 +35,7 @@
 #include <thread.h>
 #include <current.h>
 #include <syscall.h>
+#include <addrspace.h>
 
 
 /*
@@ -111,6 +112,14 @@ syscall(struct trapframe *tf)
 
 	    /* Add stuff here */
  
+	    case SYS_fork:
+	    err = sys_fork(tf, &retval);
+	    break;
+
+	    case SYS_getpid:
+	    err = sys_getpid(&retval);
+	    break;
+
 	    default:
 		kprintf("Unknown syscall %d\n", callno);
 		err = ENOSYS;
@@ -155,7 +164,22 @@ syscall(struct trapframe *tf)
  * Thus, you can trash it and do things another way if you prefer.
  */
 void
-enter_forked_process(struct trapframe *tf)
+enter_forked_process(void *data1, unsigned long data2)
 {
-	(void)tf;
+
+	(void)data2;
+	struct trapframe *tf = (struct trapframe *) data1;
+	struct addrspace *child_addrspace = (struct addrspace *) tf->tf_a0;
+	struct trapframe tf_copy;
+
+	curthread->t_addrspace = child_addrspace;
+	as_activate(curthread->t_addrspace);
+
+	tf->tf_v0 = 0;
+	tf->tf_a3 = 0;
+	tf->tf_epc += 4;
+
+	memcpy(&tf_copy, tf, sizeof(struct trapframe));
+
+	mips_usermode(&tf_copy);
 }
