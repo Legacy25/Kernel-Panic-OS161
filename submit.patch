@@ -1362,7 +1362,7 @@ index 0000000..7f199da
 +	return NO_ERROR;
 +}
 diff --git a/kern/syscall/runprogram.c b/kern/syscall/runprogram.c
-index a6f45c8..3ab9989 100644
+index a6f45c8..c5f839f 100644
 --- a/kern/syscall/runprogram.c
 +++ b/kern/syscall/runprogram.c
 @@ -44,6 +44,67 @@
@@ -1438,7 +1438,7 @@ index a6f45c8..3ab9989 100644
  	}
  
 +	/* Initialize STDIN, STDOUT and STDERR File Handles in the thread's file descriptor table*/
-+	result = file_desc_console_fd_init();
++	// result = file_desc_console_fd_init();
 +	if (result) {
 +		return result;
 +	}
@@ -2398,7 +2398,7 @@ index e7235e3..f2a909c 100644
 +}
 diff --git a/submit.patch b/submit.patch
 new file mode 100644
-index 0000000..0d10d87
+index 0000000..747c024
 --- /dev/null
 +++ b/submit.patch
 @@ -0,0 +1,2286 @@
@@ -3766,7 +3766,7 @@ index 0000000..0d10d87
 ++	return NO_ERROR;
 ++}
 +diff --git a/kern/syscall/runprogram.c b/kern/syscall/runprogram.c
-+index a6f45c8..3ab9989 100644
++index a6f45c8..c5f839f 100644
 +--- a/kern/syscall/runprogram.c
 ++++ b/kern/syscall/runprogram.c
 +@@ -44,6 +44,67 @@
@@ -3842,7 +3842,7 @@ index 0000000..0d10d87
 + 	}
 + 
 ++	/* Initialize STDIN, STDOUT and STDERR File Handles in the thread's file descriptor table*/
-++	result = file_desc_console_fd_init();
+++	// result = file_desc_console_fd_init();
 ++	if (result) {
 ++		return result;
 ++	}
@@ -4687,7 +4687,7 @@ index 0000000..0d10d87
 + 
 + #include "opt-synchprobs.h"
 + #include "opt-defaultscheduler.h"
-+@@ -118,6
++@@ -11
 \ No newline at end of file
 diff --git a/submit_my.patch b/submit_my.patch
 new file mode 100644
