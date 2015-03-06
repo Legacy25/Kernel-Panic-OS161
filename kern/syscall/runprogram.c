@@ -136,7 +136,7 @@ runprogram(char *progname)
 	}
 
 	/* Initialize STDIN, STDOUT and STDERR File Handles in the thread's file descriptor table*/
-	result = file_desc_console_fd_init();
+	// result = file_desc_console_fd_init();
 	if (result) {
 		return result;
 	}
