@@ -47,6 +47,7 @@
 #include <addrspace.h>
 #include <mainbus.h>
 #include <vnode.h>
+#include <file_syscalls.h>
 
 #include "opt-synchprobs.h"
 #include "opt-defaultscheduler.h"
@@ -118,6 +119,7 @@ struct thread *
 thread_create(const char *name)
 {
 	struct thread *thread;
+	int i;
 
 	DEBUGASSERT(name != NULL);
 
@@ -159,7 +161,7 @@ thread_create(const char *name)
 	thread->t_exited = false;
 	thread->t_exitcode = 0;
 
-	for (int i=0;i<OPEN_MAX;i++)
+	for(i=0;i<OPEN_MAX;i++)
 		thread->fd_table[i] = NULL;
 	return thread;
 }
@@ -273,7 +275,10 @@ thread_destroy(struct thread *thread)
 	thread->t_wchan_name = "DESTROYED";
 
 	kfree(thread->t_name);
-	kfree(thread->fd_table);
+
+	for (int i=0;i<OPEN_MAX;i++)
+		kfree(thread->fd_table[i]);
+
 	kfree(thread);
 }
 
@@ -1256,15 +1261,15 @@ interprocessor_interrupt(void)
  * PID related functions
  */
 
-static struct thread* processtable[MAX_PROCESSES] = { NULL };
+struct thread* proctable[MAX_PROCESSES] = { NULL };
 
 int thread_assignpid(struct thread *thrd) {
 
 	int i;
 
 	for(i=1; i<MAX_PROCESSES; i++) {
-		if(!processtable[i]) {
-			processtable[i] = thrd;
+		if(!proctable[i]) {
+			proctable[i] = thrd;
 			thrd->t_pid = i;
 			return 0;
 		}
@@ -1279,8 +1284,8 @@ void thread_reclaimpid(struct thread *thrd) {
 	int i;
 
 	for(i=1; i<MAX_PROCESSES; i++) {
-		if(processtable[i] == thrd) {
-			processtable[i] = NULL;
+		if(proctable[i] == thrd) {
+			proctable[i] = NULL;
 		}
 	}
 }

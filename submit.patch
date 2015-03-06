@@ -145,18 +145,19 @@ index 0000000..1ef2bc3
 +bmake install
 \ No newline at end of file
 diff --git a/kern/arch/mips/syscall/syscall.c b/kern/arch/mips/syscall/syscall.c
-index 0f773bd..342110b 100644
+index 0f773bd..fdfe27f 100644
 --- a/kern/arch/mips/syscall/syscall.c
 +++ b/kern/arch/mips/syscall/syscall.c
-@@ -35,6 +35,7 @@
+@@ -35,6 +35,8 @@
  #include <thread.h>
  #include <current.h>
  #include <syscall.h>
++#include <addrspace.h>
 +#include <file_syscalls.h>
  
  
  /*
-@@ -81,6 +82,8 @@ syscall(struct trapframe *tf)
+@@ -81,6 +83,8 @@ syscall(struct trapframe *tf)
  	int callno;
  	int32_t retval;
  	int err;
@@ -165,7 +166,7 @@ index 0f773bd..342110b 100644
  
  	KASSERT(curthread != NULL);
  	KASSERT(curthread->t_curspl == 0);
-@@ -98,6 +101,9 @@ syscall(struct trapframe *tf)
+@@ -98,6 +102,9 @@ syscall(struct trapframe *tf)
  	 */
  
  	retval = 0;
@@ -175,56 +176,115 @@ index 0f773bd..342110b 100644
  
  	switch (callno) {
  	    case SYS_reboot:
-@@ -110,7 +116,43 @@ syscall(struct trapframe *tf)
- 		break;
+@@ -111,6 +118,78 @@ syscall(struct trapframe *tf)
  
  	    /* Add stuff here */
-- 
+  
++		/*
++		 * Process calls
++		 */
++	    case SYS_getpid:
++	    err = sys_getpid(&retval);
++	    break;
++
++	    case SYS_fork:
++	    err = sys_fork(tf, &retval);
++	    break;
++
++	    case SYS_execv:
++
++	    break;
++
++	    case SYS_waitpid:
++
++	    break;
++
++	    case SYS__exit:
++	    err = sys_exit(tf->tf_a0);
++	    break;
++
++
++	    /*
++	     * File System calls
++	     */
 +	    case SYS_open:
 +	    	err = sys_open((char *)tf->tf_a0, tf->tf_a1, tf->tf_a2, &retval);
 +	    	break;
++
 +	    case SYS_close:
 +	    	err = sys_close(tf->tf_a0, &retval);
 +	    	break;
++
 +	    case SYS_read:
 +			err = sys_read(tf->tf_a0, (void *)tf->tf_a1, (size_t)tf->tf_a2, &retval);
 +			break;
++
 +	    case SYS_write:
 +			err = sys_write(tf->tf_a0, (void *)tf->tf_a1, (size_t)tf->tf_a2, &retval);
 +			break;
++
 +	    case SYS_lseek:
-+	    	pos = (off_t)((tf->tf_a2<<31) | (tf->tf_a3));
-+/*	    	err = copyin((const_userptr_t)(tf->tf_sp + 16), &whence, (size_t)sizeof(whence));
-+	    	if (err != 0) {
-+	    		retval = err;
-+	    		break;
-+	    	}*/
-+	    	whence = (int)tf->tf_sp + 16;
-+	    	err = sys_lseek(tf->tf_a0, pos, whence, &retval64);
-+	    	if (!err) {
-+	    		uint32_t err32_high = (uint32_t)(retval64 >> 32);
-+	    		uint32_t err32_low = (uint32_t)retval64;
-+	    		tf->tf_v1 = err32_low;
-+	    		retval = err32_high;
-+	    	}
++		pos = (off_t)((tf->tf_a2<<31) | (tf->tf_a3));
++/*	    err = copyin((const_userptr_t)(tf->tf_sp + 16), &whence, (size_t)sizeof(whence));
++		if (err != 0) {
++			retval = err;
 +			break;
++		}*/
++		whence = (int)tf->tf_sp + 16;
++		err = sys_lseek(tf->tf_a0, pos, whence, &retval64);
++		if (!err) {
++			uint32_t err32_high = (uint32_t)(retval64 >> 32);
++			uint32_t err32_low = (uint32_t)retval64;
++			tf->tf_v1 = err32_low;
++			retval = err32_high;
++		}
++		break;
++
 +	    case SYS_chdir:
-+			err = sys_chdir((const char *)tf->tf_a0, &retval);
-+			break;
++		err = sys_chdir((const char *)tf->tf_a0, &retval);
++		break;
++
 +	    case SYS_dup2:
-+			err = sys_dup2(tf->tf_a0, tf->tf_a1, &retval);
-+			break;
++		err = sys_dup2(tf->tf_a0, tf->tf_a1, &retval);
++		break;
++
 +	    case SYS___getcwd:
-+			err = sys___getcwd((char *)tf->tf_a0, (size_t)tf->tf_a1, &retval);
-+			break;
++		err = sys___getcwd((char *)tf->tf_a0, (size_t)tf->tf_a1, &retval);
++		break;
++
  	    default:
  		kprintf("Unknown syscall %d\n", callno);
  		err = ENOSYS;
+@@ -155,7 +234,22 @@ syscall(struct trapframe *tf)
+  * Thus, you can trash it and do things another way if you prefer.
+  */
+ void
+-enter_forked_process(struct trapframe *tf)
++enter_forked_process(void *data1, unsigned long data2)
+ {
+-	(void)tf;
++
++	(void)data2;
++	struct trapframe *tf = (struct trapframe *) data1;
++	struct addrspace *child_addrspace = (struct addrspace *) tf->tf_a0;
++	struct trapframe tf_copy;
++
++	curthread->t_addrspace = child_addrspace;
++	as_activate(curthread->t_addrspace);
++
++	tf->tf_v0 = 0;
++	tf->tf_a3 = 0;
++	tf->tf_epc += 4;
++
++	memcpy(&tf_copy, tf, sizeof(struct trapframe));
++
++	mips_usermode(&tf_copy);
+ }
 diff --git a/kern/conf/conf.kern b/kern/conf/conf.kern
-index d527f61..de00eaa 100644
+index d527f61..9b8ee14 100644
 --- a/kern/conf/conf.kern
 +++ b/kern/conf/conf.kern
-@@ -361,12 +361,13 @@ file      vfs/devnull.c
+@@ -361,12 +361,14 @@ file      vfs/devnull.c
  #
  # System call layer
  # (You will probably want to add stuff here while doing the basic system
@@ -235,6 +295,7 @@ index d527f61..de00eaa 100644
  file      syscall/loadelf.c
  file      syscall/runprogram.c
  file      syscall/time_syscalls.c
++file      syscall/process_syscalls.c
 +file	  syscall/file_syscalls.c	
  
  #
@@ -611,6 +672,28 @@ index ac3714b..5d3281d 100644
 +void rwlock_release_write(struct rwlock *);
 +
 +#endif /* _SYNCH_H_ */
+diff --git a/kern/include/syscall.h b/kern/include/syscall.h
+index befd3d8..8e46fa8 100644
+--- a/kern/include/syscall.h
++++ b/kern/include/syscall.h
+@@ -44,7 +44,7 @@ void syscall(struct trapframe *tf);
+  */
+ 
+ /* Helper for fork(). You write this. */
+-void enter_forked_process(struct trapframe *tf);
++void enter_forked_process(void *data1, unsigned long data2);
+ 
+ /* Enter user mode. Does not return. */
+ void enter_new_process(int argc, userptr_t argv, vaddr_t stackptr,
+@@ -57,5 +57,8 @@ void enter_new_process(int argc, userptr_t argv, vaddr_t stackptr,
+ 
+ int sys_reboot(int code);
+ int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
++int sys_fork(struct trapframe *tf, int32_t *retval);
++int sys_getpid(int32_t *retval);
++int sys_exit(int _exitcode);
+ 
+ #endif /* _SYSCALL_H_ */
 diff --git a/kern/include/test.h b/kern/include/test.h
 index 240d583..8a195ac 100644
 --- a/kern/include/test.h
@@ -624,7 +707,7 @@ index 240d583..8a195ac 100644
  /* filesystem tests */
  int fstest(int, char **);
 diff --git a/kern/include/thread.h b/kern/include/thread.h
-index 86706ca..b51aad4 100644
+index 86706ca..526f42a 100644
 --- a/kern/include/thread.h
 +++ b/kern/include/thread.h
 @@ -26,7 +26,7 @@
@@ -636,14 +719,46 @@ index 86706ca..b51aad4 100644
  #ifndef _THREAD_H_
  #define _THREAD_H_
  
-@@ -112,6 +112,7 @@ struct thread {
+@@ -56,6 +56,12 @@ struct vnode;
+ /* Macro to test if two addresses are on the same kernel stack */
+ #define SAME_STACK(p1, p2)     (((p1) & STACK_MASK) == ((p2) & STACK_MASK))
+ 
++/* Maximum number of threads/processes */
++#define MAX_PROCESSES 256
++
++/* Maximum number of open file handles */
++#define MAX_FILES 256
++
+ 
+ /* States a thread can be in. */
+ typedef enum {
+@@ -112,8 +118,18 @@ struct thread {
  	struct vnode *t_cwd;		/* current working directory */
  
  	/* add more here as needed */
++	pid_t t_pid;					/* Process ID */
++	pid_t t_ppid;					/* Parent's process ID */
++
++	bool t_exited;					/* Exited or not? */
++	int t_exitcode;					/* Exit code */
++
 +	struct file_desc* fd_table[OPEN_MAX]; //need to replace by OPEN_MAX
  };
  
++
++
++
  /* Call once during system startup to allocate data structures. */
+ void thread_bootstrap(void);
+ 
+@@ -165,4 +181,7 @@ void schedule(void);
+ void thread_consider_migration(void);
+ 
+ 
++int thread_assignpid(struct thread *thrd);
++void thread_reclaimpid(struct thread *thrd);
++
+ #endif /* _THREAD_H_ */
 diff --git a/kern/startup/main.c b/kern/startup/main.c
 index be4c4b8..4c4f3c8 100644
 --- a/kern/startup/main.c
@@ -1247,10 +1362,10 @@ index 0000000..7f199da
 +	return NO_ERROR;
 +}
 diff --git a/kern/syscall/runprogram.c b/kern/syscall/runprogram.c
-index a6f45c8..4501453 100644
+index a6f45c8..3ab9989 100644
 --- a/kern/syscall/runprogram.c
 +++ b/kern/syscall/runprogram.c
-@@ -44,6 +44,57 @@
+@@ -44,6 +44,67 @@
  #include <vfs.h>
  #include <syscall.h>
  #include <test.h>
@@ -1260,15 +1375,15 @@ index a6f45c8..4501453 100644
 +
 +int file_desc_console_fd_init(void) {
 +	struct vnode *vd_stdin, *vd_stdout, *vd_stderr;
-+	char *path_name = NULL;
-+	path_name = kstrdup("con:");
++	char *path_name_stdin = NULL, *path_name_stdout = NULL, *path_name_stderr = NULL;
++	path_name_stdin = kstrdup("con:");
 +
 +	int res_stdin = 0, res_stdout = 0, res_stderr = 0;
 +
 +	//////////////////STDIN//////////////////
-+	res_stdin = vfs_open(path_name, O_RDONLY, 0, &vd_stdin);
++	res_stdin = vfs_open(path_name_stdin, O_RDONLY, 0, &vd_stdin);
 +	if (res_stdin) {
-+		kfree(path_name);
++		kfree(path_name_stdin);
 +		return res_stdin;
 +	}
 +	curthread->fd_table[STDIN_FILENO] = (PFD)kmalloc(sizeof(PFD));
@@ -1276,12 +1391,14 @@ index a6f45c8..4501453 100644
 +	curthread->fd_table[STDIN_FILENO]->flags = O_RDONLY;
 +	curthread->fd_table[STDIN_FILENO]->offset = 0;
 +	curthread->fd_table[STDIN_FILENO]->ref_count = 1;
-+	curthread->fd_table[STDIN_FILENO]->fl_lock = lock_create(path_name);
++	curthread->fd_table[STDIN_FILENO]->fl_lock = lock_create("con:");
 +
 +	//////////////////STDOUT//////////////////
-+	res_stdout = vfs_open(path_name, O_WRONLY, 0, &vd_stdout);
++	path_name_stdout = kstrdup("con:");
++	res_stdout = vfs_open(path_name_stdout, O_WRONLY, 0, &vd_stdout);
 +	if (res_stdout) {
-+		kfree(path_name);
++		kfree(path_name_stdin);
++		kfree(path_name_stdout);
 +		return res_stdout;
 +	}
 +	curthread->fd_table[STDOUT_FILENO] = (PFD)kmalloc(sizeof(PFD));
@@ -1289,12 +1406,15 @@ index a6f45c8..4501453 100644
 +	curthread->fd_table[STDOUT_FILENO]->flags = O_WRONLY;
 +	curthread->fd_table[STDOUT_FILENO]->offset = 0;
 +	curthread->fd_table[STDOUT_FILENO]->ref_count = 1;
-+	curthread->fd_table[STDOUT_FILENO]->fl_lock = lock_create(path_name);
++	curthread->fd_table[STDOUT_FILENO]->fl_lock = lock_create("con:");
 +
 +	//////////////////STDERR//////////////////
-+	res_stderr = vfs_open(path_name, O_WRONLY, 0, &vd_stderr);
++	path_name_stderr = kstrdup("con:");
++	res_stderr = vfs_open(path_name_stderr, O_WRONLY, 0, &vd_stderr);
 +	if (res_stderr) {
-+		kfree(path_name);
++		kfree(path_name_stdin);
++		kfree(path_name_stdout);
++		kfree(path_name_stderr);
 +		return res_stderr;
 +	}
 +	curthread->fd_table[STDERR_FILENO] = (PFD)kmalloc(sizeof(PFD));
@@ -1302,13 +1422,18 @@ index a6f45c8..4501453 100644
 +	curthread->fd_table[STDERR_FILENO]->flags = O_WRONLY;
 +	curthread->fd_table[STDERR_FILENO]->offset = 0;
 +	curthread->fd_table[STDERR_FILENO]->ref_count = 1;
-+	curthread->fd_table[STDERR_FILENO]->fl_lock = lock_create(path_name);
++	curthread->fd_table[STDERR_FILENO]->fl_lock = lock_create("con:");
++
++	kfree(path_name_stdin);
++	kfree(path_name_stdout);
++	kfree(path_name_stderr);
++
 +	return 0;
 +}
  
  /*
   * Load program "progname" and start running it in usermode.
-@@ -74,6 +125,12 @@ runprogram(char *progname)
+@@ -74,6 +135,12 @@ runprogram(char *progname)
  		return ENOMEM;
  	}
  
@@ -1321,7 +1446,7 @@ index a6f45c8..4501453 100644
  	/* Activate it. */
  	as_activate(curthread->t_addrspace);
  
-@@ -103,4 +160,3 @@ runprogram(char *progname)
+@@ -103,4 +170,3 @@ runprogram(char *progname)
  	panic("enter_new_process returned\n");
  	return EINVAL;
  }
@@ -2147,33 +2272,136 @@ index 9a7468c..e93ab5a 100644
 +	spinlock_release(&rw->rwlock_lock);
 +}
 diff --git a/kern/thread/thread.c b/kern/thread/thread.c
-index e7235e3..76bd781 100644
+index e7235e3..f2a909c 100644
 --- a/kern/thread/thread.c
 +++ b/kern/thread/thread.c
-@@ -153,7 +153,8 @@ thread_create(const char *name)
+@@ -47,6 +47,7 @@
+ #include <addrspace.h>
+ #include <mainbus.h>
+ #include <vnode.h>
++#include <file_syscalls.h>
+ 
+ #include "opt-synchprobs.h"
+ #include "opt-defaultscheduler.h"
+@@ -118,6 +119,7 @@ struct thread *
+ thread_create(const char *name)
+ {
+ 	struct thread *thread;
++	int i;
+ 
+ 	DEBUGASSERT(name != NULL);
+ 
+@@ -153,7 +155,14 @@ thread_create(const char *name)
  	thread->t_cwd = NULL;
  
  	/* If you add to struct thread, be sure to initialize here */
--
-+	for (int i=0;i<OPEN_MAX;i++)
++	thread->t_pid = 0;
++	thread->t_ppid = -1;
++
++	thread->t_exited = false;
++	thread->t_exitcode = 0;
+ 
++	for(i=0;i<OPEN_MAX;i++)
 +		thread->fd_table[i] = NULL;
  	return thread;
  }
  
-@@ -263,6 +264,7 @@ thread_destroy(struct thread *thread)
+@@ -241,6 +250,9 @@ thread_destroy(struct thread *thread)
+ 	KASSERT(thread != curthread);
+ 	KASSERT(thread->t_state != S_RUN);
+ 
++
++	thread_reclaimpid(thread);
++
+ 	/*
+ 	 * If you add things to struct thread, be sure to clean them up
+ 	 * either here or in thread_exit(). (And not both...)
+@@ -263,6 +275,10 @@ thread_destroy(struct thread *thread)
  	thread->t_wchan_name = "DESTROYED";
  
  	kfree(thread->t_name);
-+	kfree(thread->fd_table);
++
++	for (int i=0;i<OPEN_MAX;i++)
++		kfree(thread->fd_table[i]);
++
  	kfree(thread);
  }
  
+@@ -483,12 +499,20 @@ thread_fork(const char *name,
+ 	    struct thread **ret)
+ {
+ 	struct thread *newthread;
++	int result;
+ 
+ 	newthread = thread_create(name);
+ 	if (newthread == NULL) {
+ 		return ENOMEM;
+ 	}
+ 
++	result = thread_assignpid(newthread);
++	if(result) {
++		return result;
++	}
++
++
++
+ 	/* Allocate a stack */
+ 	newthread->t_stack = kmalloc(STACK_SIZE);
+ 	if (newthread->t_stack == NULL) {
+@@ -793,6 +817,7 @@ thread_exit(void)
+ 	struct thread *cur;
+ 
+ 	cur = curthread;
++	cur->t_exited = true;
+ 
+ 	/* VFS fields */
+ 	if (cur->t_cwd) {
+@@ -1228,3 +1253,39 @@ interprocessor_interrupt(void)
+ 	curcpu->c_ipi_pending = 0;
+ 	spinlock_release(&curcpu->c_ipi_lock);
+ }
++
++
++
++
++/*
++ * PID related functions
++ */
++
++struct thread* proctable[MAX_PROCESSES] = { NULL };
++
++int thread_assignpid(struct thread *thrd) {
++
++	int i;
++
++	for(i=1; i<MAX_PROCESSES; i++) {
++		if(!proctable[i]) {
++			proctable[i] = thrd;
++			thrd->t_pid = i;
++			return 0;
++		}
++	}
++
++	return ENPROC;
++
++}
++
++void thread_reclaimpid(struct thread *thrd) {
++
++	int i;
++
++	for(i=1; i<MAX_PROCESSES; i++) {
++		if(proctable[i] == thrd) {
++			proctable[i] = NULL;
++		}
++	}
++}
 diff --git a/submit.patch b/submit.patch
 new file mode 100644
-index 0000000..0edf3c2
+index 0000000..0d10d87
 --- /dev/null
 +++ b/submit.patch
-@@ -0,0 +1,2111 @@
+@@ -0,0 +1,2286 @@
 +diff --git a/.cproject b/.cproject
 +new file mode 100644
 +index 0000000..91707f3
@@ -2321,18 +2549,19 @@ index 0000000..0edf3c2
 ++bmake install
 +\ No newline at end of file
 +diff --git a/kern/arch/mips/syscall/syscall.c b/kern/arch/mips/syscall/syscall.c
-+index 0f773bd..342110b 100644
++index 0f773bd..fdfe27f 100644
 +--- a/kern/arch/mips/syscall/syscall.c
 ++++ b/kern/arch/mips/syscall/syscall.c
-+@@ -35,6 +35,7 @@
++@@ -35,6 +35,8 @@
 + #include <thread.h>
 + #include <current.h>
 + #include <syscall.h>
+++#include <addrspace.h>
 ++#include <file_syscalls.h>
 + 
 + 
 + /*
-+@@ -81,6 +82,8 @@ syscall(struct trapframe *tf)
++@@ -81,6 +83,8 @@ syscall(struct trapframe *tf)
 + 	int callno;
 + 	int32_t retval;
 + 	int err;
@@ -2341,7 +2570,7 @@ index 0000000..0edf3c2
 + 
 + 	KASSERT(curthread != NULL);
 + 	KASSERT(curthread->t_curspl == 0);
-+@@ -98,6 +101,9 @@ syscall(struct trapframe *tf)
++@@ -98,6 +102,9 @@ syscall(struct trapframe *tf)
 + 	 */
 + 
 + 	retval = 0;
@@ -2351,56 +2580,115 @@ index 0000000..0edf3c2
 + 
 + 	switch (callno) {
 + 	    case SYS_reboot:
-+@@ -110,7 +116,43 @@ syscall(struct trapframe *tf)
-+ 		break;
++@@ -111,6 +118,78 @@ syscall(struct trapframe *tf)
 + 
 + 	    /* Add stuff here */
-+- 
++  
+++		/*
+++		 * Process calls
+++		 */
+++	    case SYS_getpid:
+++	    err = sys_getpid(&retval);
+++	    break;
+++
+++	    case SYS_fork:
+++	    err = sys_fork(tf, &retval);
+++	    break;
+++
+++	    case SYS_execv:
+++
+++	    break;
+++
+++	    case SYS_waitpid:
+++
+++	    break;
+++
+++	    case SYS__exit:
+++	    err = sys_exit(tf->tf_a0);
+++	    break;
+++
+++
+++	    /*
+++	     * File System calls
+++	     */
 ++	    case SYS_open:
 ++	    	err = sys_open((char *)tf->tf_a0, tf->tf_a1, tf->tf_a2, &retval);
 ++	    	break;
+++
 ++	    case SYS_close:
 ++	    	err = sys_close(tf->tf_a0, &retval);
 ++	    	break;
+++
 ++	    case SYS_read:
 ++			err = sys_read(tf->tf_a0, (void *)tf->tf_a1, (size_t)tf->tf_a2, &retval);
 ++			break;
+++
 ++	    case SYS_write:
 ++			err = sys_write(tf->tf_a0, (void *)tf->tf_a1, (size_t)tf->tf_a2, &retval);
 ++			break;
+++
 ++	    case SYS_lseek:
-++	    	pos = (off_t)((tf->tf_a2<<31) | (tf->tf_a3));
-++/*	    	err = copyin((const_userptr_t)(tf->tf_sp + 16), &whence, (size_t)sizeof(whence));
-++	    	if (err != 0) {
-++	    		retval = err;
-++	    		break;
-++	    	}*/
-++	    	whence = (int)tf->tf_sp + 16;
-++	    	err = sys_lseek(tf->tf_a0, pos, whence, &retval64);
-++	    	if (!err) {
-++	    		uint32_t err32_high = (uint32_t)(retval64 >> 32);
-++	    		uint32_t err32_low = (uint32_t)retval64;
-++	    		tf->tf_v1 = err32_low;
-++	    		retval = err32_high;
-++	    	}
+++		pos = (off_t)((tf->tf_a2<<31) | (tf->tf_a3));
+++/*	    err = copyin((const_userptr_t)(tf->tf_sp + 16), &whence, (size_t)sizeof(whence));
+++		if (err != 0) {
+++			retval = err;
 ++			break;
+++		}*/
+++		whence = (int)tf->tf_sp + 16;
+++		err = sys_lseek(tf->tf_a0, pos, whence, &retval64);
+++		if (!err) {
+++			uint32_t err32_high = (uint32_t)(retval64 >> 32);
+++			uint32_t err32_low = (uint32_t)retval64;
+++			tf->tf_v1 = err32_low;
+++			retval = err32_high;
+++		}
+++		break;
+++
 ++	    case SYS_chdir:
-++			err = sys_chdir((const char *)tf->tf_a0, &retval);
-++			break;
+++		err = sys_chdir((const char *)tf->tf_a0, &retval);
+++		break;
+++
 ++	    case SYS_dup2:
-++			err = sys_dup2(tf->tf_a0, tf->tf_a1, &retval);
-++			break;
+++		err = sys_dup2(tf->tf_a0, tf->tf_a1, &retval);
+++		break;
+++
 ++	    case SYS___getcwd:
-++			err = sys___getcwd((char *)tf->tf_a0, (size_t)tf->tf_a1, &retval);
-++			break;
+++		err = sys___getcwd((char *)tf->tf_a0, (size_t)tf->tf_a1, &retval);
+++		break;
+++
 + 	    default:
 + 		kprintf("Unknown syscall %d\n", callno);
 + 		err = ENOSYS;
++@@ -155,7 +234,22 @@ syscall(struct trapframe *tf)
++  * Thus, you can trash it and do things another way if you prefer.
++  */
++ void
++-enter_forked_process(struct trapframe *tf)
+++enter_forked_process(void *data1, unsigned long data2)
++ {
++-	(void)tf;
+++
+++	(void)data2;
+++	struct trapframe *tf = (struct trapframe *) data1;
+++	struct addrspace *child_addrspace = (struct addrspace *) tf->tf_a0;
+++	struct trapframe tf_copy;
+++
+++	curthread->t_addrspace = child_addrspace;
+++	as_activate(curthread->t_addrspace);
+++
+++	tf->tf_v0 = 0;
+++	tf->tf_a3 = 0;
+++	tf->tf_epc += 4;
+++
+++	memcpy(&tf_copy, tf, sizeof(struct trapframe));
+++
+++	mips_usermode(&tf_copy);
++ }
 +diff --git a/kern/conf/conf.kern b/kern/conf/conf.kern
-+index d527f61..de00eaa 100644
++index d527f61..9b8ee14 100644
 +--- a/kern/conf/conf.kern
 ++++ b/kern/conf/conf.kern
-+@@ -361,12 +361,13 @@ file      vfs/devnull.c
++@@ -361,12 +361,14 @@ file      vfs/devnull.c
 + #
 + # System call layer
 + # (You will probably want to add stuff here while doing the basic system
@@ -2411,6 +2699,7 @@ index 0000000..0edf3c2
 + file      syscall/loadelf.c
 + file      syscall/runprogram.c
 + file      syscall/time_syscalls.c
+++file      syscall/process_syscalls.c
 ++file	  syscall/file_syscalls.c	
 + 
 + #
@@ -2787,6 +3076,28 @@ index 0000000..0edf3c2
 ++void rwlock_release_write(struct rwlock *);
 ++
 ++#endif /* _SYNCH_H_ */
++diff --git a/kern/include/syscall.h b/kern/include/syscall.h
++index befd3d8..8e46fa8 100644
++--- a/kern/include/syscall.h
+++++ b/kern/include/syscall.h
++@@ -44,7 +44,7 @@ void syscall(struct trapframe *tf);
++  */
++ 
++ /* Helper for fork(). You write this. */
++-void enter_forked_process(struct trapframe *tf);
+++void enter_forked_process(void *data1, unsigned long data2);
++ 
++ /* Enter user mode. Does not return. */
++ void enter_new_process(int argc, userptr_t argv, vaddr_t stackptr,
++@@ -57,5 +57,8 @@ void enter_new_process(int argc, userptr_t argv, vaddr_t stackptr,
++ 
++ int sys_reboot(int code);
++ int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
+++int sys_fork(struct trapframe *tf, int32_t *retval);
+++int sys_getpid(int32_t *retval);
+++int sys_exit(int _exitcode);
++ 
++ #endif /* _SYSCALL_H_ */
 +diff --git a/kern/include/test.h b/kern/include/test.h
 +index 240d583..8a195ac 100644
 +--- a/kern/include/test.h
@@ -2800,7 +3111,7 @@ index 0000000..0edf3c2
 + /* filesystem tests */
 + int fstest(int, char **);
 +diff --git a/kern/include/thread.h b/kern/include/thread.h
-+index 86706ca..b51aad4 100644
++index 86706ca..526f42a 100644
 +--- a/kern/include/thread.h
 ++++ b/kern/include/thread.h
 +@@ -26,7 +26,7 @@
@@ -2812,14 +3123,46 @@ index 0000000..0edf3c2
 + #ifndef _THREAD_H_
 + #define _THREAD_H_
 + 
-+@@ -112,6 +112,7 @@ struct thread {
++@@ -56,6 +56,12 @@ struct vnode;
++ /* Macro to test if two addresses are on the same kernel stack */
++ #define SAME_STACK(p1, p2)     (((p1) & STACK_MASK) == ((p2) & STACK_MASK))
++ 
+++/* Maximum number of threads/processes */
+++#define MAX_PROCESSES 256
+++
+++/* Maximum number of open file handles */
+++#define MAX_FILES 256
+++
++ 
++ /* States a thread can be in. */
++ typedef enum {
++@@ -112,8 +118,18 @@ struct thread {
 + 	struct vnode *t_cwd;		/* current working directory */
 + 
 + 	/* add more here as needed */
+++	pid_t t_pid;					/* Process ID */
+++	pid_t t_ppid;					/* Parent's process ID */
+++
+++	bool t_exited;					/* Exited or not? */
+++	int t_exitcode;					/* Exit code */
+++
 ++	struct file_desc* fd_table[OPEN_MAX]; //need to replace by OPEN_MAX
 + };
 + 
+++
+++
+++
 + /* Call once during system startup to allocate data structures. */
++ void thread_bootstrap(void);
++ 
++@@ -165,4 +181,7 @@ void schedule(void);
++ void thread_consider_migration(void);
++ 
++ 
+++int thread_assignpid(struct thread *thrd);
+++void thread_reclaimpid(struct thread *thrd);
+++
++ #endif /* _THREAD_H_ */
 +diff --git a/kern/startup/main.c b/kern/startup/main.c
 +index be4c4b8..4c4f3c8 100644
 +--- a/kern/startup/main.c
@@ -3423,10 +3766,10 @@ index 0000000..0edf3c2
 ++	return NO_ERROR;
 ++}
 +diff --git a/kern/syscall/runprogram.c b/kern/syscall/runprogram.c
-+index a6f45c8..4501453 100644
++index a6f45c8..3ab9989 100644
 +--- a/kern/syscall/runprogram.c
 ++++ b/kern/syscall/runprogram.c
-+@@ -44,6 +44,57 @@
++@@ -44,6 +44,67 @@
 + #include <vfs.h>
 + #include <syscall.h>
 + #include <test.h>
@@ -3436,15 +3779,15 @@ index 0000000..0edf3c2
 ++
 ++int file_desc_console_fd_init(void) {
 ++	struct vnode *vd_stdin, *vd_stdout, *vd_stderr;
-++	char *path_name = NULL;
-++	path_name = kstrdup("con:");
+++	char *path_name_stdin = NULL, *path_name_stdout = NULL, *path_name_stderr = NULL;
+++	path_name_stdin = kstrdup("con:");
 ++
 ++	int res_stdin = 0, res_stdout = 0, res_stderr = 0;
 ++
 ++	//////////////////STDIN//////////////////
-++	res_stdin = vfs_open(path_name, O_RDONLY, 0, &vd_stdin);
+++	res_stdin = vfs_open(path_name_stdin, O_RDONLY, 0, &vd_stdin);
 ++	if (res_stdin) {
-++		kfree(path_name);
+++		kfree(path_name_stdin);
 ++		return res_stdin;
 ++	}
 ++	curthread->fd_table[STDIN_FILENO] = (PFD)kmalloc(sizeof(PFD));
@@ -3452,12 +3795,14 @@ index 0000000..0edf3c2
 ++	curthread->fd_table[STDIN_FILENO]->flags = O_RDONLY;
 ++	curthread->fd_table[STDIN_FILENO]->offset = 0;
 ++	curthread->fd_table[STDIN_FILENO]->ref_count = 1;
-++	curthread->fd_table[STDIN_FILENO]->fl_lock = lock_create(path_name);
+++	curthread->fd_table[STDIN_FILENO]->fl_lock = lock_create("con:");
 ++
 ++	//////////////////STDOUT//////////////////
-++	res_stdout = vfs_open(path_name, O_WRONLY, 0, &vd_stdout);
+++	path_name_stdout = kstrdup("con:");
+++	res_stdout = vfs_open(path_name_stdout, O_WRONLY, 0, &vd_stdout);
 ++	if (res_stdout) {
-++		kfree(path_name);
+++		kfree(path_name_stdin);
+++		kfree(path_name_stdout);
 ++		return res_stdout;
 ++	}
 ++	curthread->fd_table[STDOUT_FILENO] = (PFD)kmalloc(sizeof(PFD));
@@ -3465,12 +3810,15 @@ index 0000000..0edf3c2
 ++	curthread->fd_table[STDOUT_FILENO]->flags = O_WRONLY;
 ++	curthread->fd_table[STDOUT_FILENO]->offset = 0;
 ++	curthread->fd_table[STDOUT_FILENO]->ref_count = 1;
-++	curthread->fd_table[STDOUT_FILENO]->fl_lock = lock_create(path_name);
+++	curthread->fd_table[STDOUT_FILENO]->fl_lock = lock_create("con:");
 ++
 ++	//////////////////STDERR//////////////////
-++	res_stderr = vfs_open(path_name, O_WRONLY, 0, &vd_stderr);
+++	path_name_stderr = kstrdup("con:");
+++	res_stderr = vfs_open(path_name_stderr, O_WRONLY, 0, &vd_stderr);
 ++	if (res_stderr) {
-++		kfree(path_name);
+++		kfree(path_name_stdin);
+++		kfree(path_name_stdout);
+++		kfree(path_name_stderr);
 ++		return res_stderr;
 ++	}
 ++	curthread->fd_table[STDERR_FILENO] = (PFD)kmalloc(sizeof(PFD));
@@ -3478,13 +3826,18 @@ index 0000000..0edf3c2
 ++	curthread->fd_table[STDERR_FILENO]->flags = O_WRONLY;
 ++	curthread->fd_table[STDERR_FILENO]->offset = 0;
 ++	curthread->fd_table[STDERR_FILENO]->ref_count = 1;
-++	curthread->fd_table[STDERR_FILENO]->fl_lock = lock_create(path_name);
+++	curthread->fd_table[STDERR_FILENO]->fl_lock = lock_create("con:");
+++
+++	kfree(path_name_stdin);
+++	kfree(path_name_stdout);
+++	kfree(path_name_stderr);
+++
 ++	return 0;
 ++}
 + 
 + /*
 +  * Load program "progname" and start running it in usermode.
-+@@ -74,6 +125,12 @@ runprogram(char *progname)
++@@ -74,6 +135,12 @@ runprogram(char *progname)
 + 		return ENOMEM;
 + 	}
 + 
@@ -3497,7 +3850,7 @@ index 0000000..0edf3c2
 + 	/* Activate it. */
 + 	as_activate(curthread->t_addrspace);
 + 
-+@@ -103,4 +160,3 @@ runprogram(char *progname)
++@@ -103,4 +170,3 @@ runprogram(char *progname)
 + 	panic("enter_new_process returned\n");
 + 	return EINVAL;
 + }
@@ -4284,7 +4637,57 @@ index 0000000..0edf3c2
 ++	while(rw->rwlock_rdlk_count != 0 || rw->rwlock_wrlk_count == 0) {
 ++		wchan_lock(rw->rwlock_wr_wchan);
 ++		spinlock_release(&rw->rwlock_lock);
-++		wchan_sleep(rw->rwlock
+++		wchan_sleep(rw->rwlock_wr_wchan);
+++
+++		spinlock_acquire(&rw->rwlock_lock);
+++	}
+++
+++	KASSERT(rw->rwlock_wrlk_count == 1);
+++	rw->rwlock_mode = RW_MODE_WRITE;
+++	rw->rwlock_wrlk_count--;
+++
+++	KASSERT(rw->rwlock_wrlk_count == 0);
+++
+++	spinlock_release(&rw->rwlock_lock);
+++}
+++
+++void
+++rwlock_release_write(struct rwlock *rw)
+++{
+++	spinlock_acquire(&rw->rwlock_lock);
+++
+++	KASSERT(rw->rwlock_wrlk_count == 0);
+++	rw->rwlock_wrlk_count++;
+++	KASSERT(rw->rwlock_wrlk_count == 1);
+++
+++	rw->rwlock_rd_threads_serviced = 0;
+++	if(!wchan_isempty(rw->rwlock_wr_wchan)) {
+++		rw->rwlock_mode = RW_MODE_WRITES_WAITING;
+++	}
+++	else {
+++		rw->rwlock_mode = RW_MODE_READ;
+++	}
+++
+++	if(!wchan_isempty(rw->rwlock_rd_wchan))
+++		wchan_wakeall(rw->rwlock_rd_wchan);
+++	else
+++		wchan_wakeone(rw->rwlock_wr_wchan);
+++
+++	spinlock_release(&rw->rwlock_lock);
+++}
++diff --git a/kern/thread/thread.c b/kern/thread/thread.c
++index e7235e3..f2a909c 100644
++--- a/kern/thread/thread.c
+++++ b/kern/thread/thread.c
++@@ -47,6 +47,7 @@
++ #include <addrspace.h>
++ #include <mainbus.h>
++ #include <vnode.h>
+++#include <file_syscalls.h>
++ 
++ #include "opt-synchprobs.h"
++ #include "opt-defaultscheduler.h"
++@@ -118,6
 \ No newline at end of file
 diff --git a/submit_my.patch b/submit_my.patch
 new file mode 100644

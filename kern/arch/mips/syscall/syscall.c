@@ -118,51 +118,78 @@ syscall(struct trapframe *tf)
 
 	    /* Add stuff here */
  
-	    case SYS_fork:
-	    err = sys_fork(tf, &retval);
-	    break;
-
+		/*
+		 * Process calls
+		 */
 	    case SYS_getpid:
 	    err = sys_getpid(&retval);
 	    break;
 
+	    case SYS_fork:
+	    err = sys_fork(tf, &retval);
+	    break;
+
+	    case SYS_execv:
+
+	    break;
+
+	    case SYS_waitpid:
+
+	    break;
+
+	    case SYS__exit:
+	    err = sys_exit(tf->tf_a0);
+	    break;
+
+
+	    /*
+	     * File System calls
+	     */
 	    case SYS_open:
 	    	err = sys_open((char *)tf->tf_a0, tf->tf_a1, tf->tf_a2, &retval);
 	    	break;
+
 	    case SYS_close:
 	    	err = sys_close(tf->tf_a0, &retval);
 	    	break;
+
 	    case SYS_read:
 			err = sys_read(tf->tf_a0, (void *)tf->tf_a1, (size_t)tf->tf_a2, &retval);
 			break;
+
 	    case SYS_write:
 			err = sys_write(tf->tf_a0, (void *)tf->tf_a1, (size_t)tf->tf_a2, &retval);
 			break;
+
 	    case SYS_lseek:
-	    	pos = (off_t)((tf->tf_a2<<31) | (tf->tf_a3));
-/*	    	err = copyin((const_userptr_t)(tf->tf_sp + 16), &whence, (size_t)sizeof(whence));
-	    	if (err != 0) {
-	    		retval = err;
-	    		break;
-	    	}*/
-	    	whence = (int)tf->tf_sp + 16;
-	    	err = sys_lseek(tf->tf_a0, pos, whence, &retval64);
-	    	if (!err) {
-	    		uint32_t err32_high = (uint32_t)(retval64 >> 32);
-	    		uint32_t err32_low = (uint32_t)retval64;
-	    		tf->tf_v1 = err32_low;
-	    		retval = err32_high;
-	    	}
+		pos = (off_t)((tf->tf_a2<<31) | (tf->tf_a3));
+/*	    err = copyin((const_userptr_t)(tf->tf_sp + 16), &whence, (size_t)sizeof(whence));
+		if (err != 0) {
+			retval = err;
 			break;
+		}*/
+		whence = (int)tf->tf_sp + 16;
+		err = sys_lseek(tf->tf_a0, pos, whence, &retval64);
+		if (!err) {
+			uint32_t err32_high = (uint32_t)(retval64 >> 32);
+			uint32_t err32_low = (uint32_t)retval64;
+			tf->tf_v1 = err32_low;
+			retval = err32_high;
+		}
+		break;
+
 	    case SYS_chdir:
-			err = sys_chdir((const char *)tf->tf_a0, &retval);
-			break;
+		err = sys_chdir((const char *)tf->tf_a0, &retval);
+		break;
+
 	    case SYS_dup2:
-			err = sys_dup2(tf->tf_a0, tf->tf_a1, &retval);
-			break;
+		err = sys_dup2(tf->tf_a0, tf->tf_a1, &retval);
+		break;
+
 	    case SYS___getcwd:
-			err = sys___getcwd((char *)tf->tf_a0, (size_t)tf->tf_a1, &retval);
-			break;
+		err = sys___getcwd((char *)tf->tf_a0, (size_t)tf->tf_a1, &retval);
+		break;
+
 	    default:
 		kprintf("Unknown syscall %d\n", callno);
 		err = ENOSYS;

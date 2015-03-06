@@ -127,6 +127,9 @@ struct thread {
 	struct file_desc* fd_table[OPEN_MAX]; //need to replace by OPEN_MAX
 };
 
+
+
+
 /* Call once during system startup to allocate data structures. */
 void thread_bootstrap(void);
 

@@ -50,15 +50,15 @@
 
 int file_desc_console_fd_init(void) {
 	struct vnode *vd_stdin, *vd_stdout, *vd_stderr;
-	char *path_name = NULL;
-	path_name = kstrdup("con:");
+	char *path_name_stdin = NULL, *path_name_stdout = NULL, *path_name_stderr = NULL;
+	path_name_stdin = kstrdup("con:");
 
 	int res_stdin = 0, res_stdout = 0, res_stderr = 0;
 
 	//////////////////STDIN//////////////////
-	res_stdin = vfs_open(path_name, O_RDONLY, 0, &vd_stdin);
+	res_stdin = vfs_open(path_name_stdin, O_RDONLY, 0, &vd_stdin);
 	if (res_stdin) {
-		kfree(path_name);
+		kfree(path_name_stdin);
 		return res_stdin;
 	}
 	curthread->fd_table[STDIN_FILENO] = (PFD)kmalloc(sizeof(PFD));
@@ -66,12 +66,14 @@ int file_desc_console_fd_init(void) {
 	curthread->fd_table[STDIN_FILENO]->flags = O_RDONLY;
 	curthread->fd_table[STDIN_FILENO]->offset = 0;
 	curthread->fd_table[STDIN_FILENO]->ref_count = 1;
-	curthread->fd_table[STDIN_FILENO]->fl_lock = lock_create(path_name);
+	curthread->fd_table[STDIN_FILENO]->fl_lock = lock_create("con:");
 
 	//////////////////STDOUT//////////////////
-	res_stdout = vfs_open(path_name, O_WRONLY, 0, &vd_stdout);
+	path_name_stdout = kstrdup("con:");
+	res_stdout = vfs_open(path_name_stdout, O_WRONLY, 0, &vd_stdout);
 	if (res_stdout) {
-		kfree(path_name);
+		kfree(path_name_stdin);
+		kfree(path_name_stdout);
 		return res_stdout;
 	}
 	curthread->fd_table[STDOUT_FILENO] = (PFD)kmalloc(sizeof(PFD));
@@ -79,12 +81,15 @@ int file_desc_console_fd_init(void) {
 	curthread->fd_table[STDOUT_FILENO]->flags = O_WRONLY;
 	curthread->fd_table[STDOUT_FILENO]->offset = 0;
 	curthread->fd_table[STDOUT_FILENO]->ref_count = 1;
-	curthread->fd_table[STDOUT_FILENO]->fl_lock = lock_create(path_name);
+	curthread->fd_table[STDOUT_FILENO]->fl_lock = lock_create("con:");
 
 	//////////////////STDERR//////////////////
-	res_stderr = vfs_open(path_name, O_WRONLY, 0, &vd_stderr);
+	path_name_stderr = kstrdup("con:");
+	res_stderr = vfs_open(path_name_stderr, O_WRONLY, 0, &vd_stderr);
 	if (res_stderr) {
-		kfree(path_name);
+		kfree(path_name_stdin);
+		kfree(path_name_stdout);
+		kfree(path_name_stderr);
 		return res_stderr;
 	}
 	curthread->fd_table[STDERR_FILENO] = (PFD)kmalloc(sizeof(PFD));
@@ -92,7 +97,12 @@ int file_desc_console_fd_init(void) {
 	curthread->fd_table[STDERR_FILENO]->flags = O_WRONLY;
 	curthread->fd_table[STDERR_FILENO]->offset = 0;
 	curthread->fd_table[STDERR_FILENO]->ref_count = 1;
-	curthread->fd_table[STDERR_FILENO]->fl_lock = lock_create(path_name);
+	curthread->fd_table[STDERR_FILENO]->fl_lock = lock_create("con:");
+
+	kfree(path_name_stdin);
+	kfree(path_name_stdout);
+	kfree(path_name_stderr);
+
 	return 0;
 }
 

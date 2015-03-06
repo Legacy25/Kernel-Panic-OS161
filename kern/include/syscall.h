@@ -59,5 +59,6 @@ int sys_reboot(int code);
 int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
 int sys_fork(struct trapframe *tf, int32_t *retval);
 int sys_getpid(int32_t *retval);
+int sys_exit(int _exitcode);
 
 #endif /* _SYSCALL_H_ */
