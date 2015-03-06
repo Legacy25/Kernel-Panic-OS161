@@ -26,7 +26,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
+#include <limits.h>
 #ifndef _THREAD_H_
 #define _THREAD_H_
 
@@ -124,6 +124,7 @@ struct thread {
 	bool t_exited;					/* Exited or not? */
 	int t_exitcode;					/* Exit code */
 
+	struct file_desc* fd_table[OPEN_MAX]; //need to replace by OPEN_MAX
 };
 
 /* Call once during system startup to allocate data structures. */

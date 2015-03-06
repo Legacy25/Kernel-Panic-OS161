@@ -361,13 +361,14 @@ file      vfs/devnull.c
 #
 # System call layer
 # (You will probably want to add stuff here while doing the basic system
-# calls assignment.)
+# calls assignment.)l
 #
 
 file      syscall/loadelf.c
 file      syscall/runprogram.c
 file      syscall/time_syscalls.c
 file      syscall/process_syscalls.c
+file	  syscall/file_syscalls.c	
 
 #
 # Startup and initialization

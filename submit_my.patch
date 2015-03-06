@@ -1,0 +1,1304 @@
+diff --git a/.gitignore b/.gitignore
+index ccea0c4..6520458 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,9 +1,6 @@
+-.depend
+-.settings
+-.project
+-.cproject
+-/kern/compile/
+-defs.mk
+ build
+-/user/testbin/randcall/calls.c
+-*.swp
++.depend
++/defs.mk
++kern/compile/
++user/testbin/randcall/calls.c
++typescript
+diff --git a/confinstall.sh b/confinstall.sh
+new file mode 100755
+index 0000000..1934176
+--- /dev/null
++++ b/confinstall.sh
+@@ -0,0 +1,18 @@
++#!/bin/bash
++
++default=ASST1
++
++if [ $# -eq 0 ]
++then
++	asst=$default
++	echo $asst
++else
++	asst=$1
++fi
++
++cd /home/trinity/src/kern/conf
++./config $asst
++cd ../compile/$asst
++bmake depend
++bmake
++bmake install
+\ No newline at end of file
+diff --git a/kern/include/synch.h b/kern/include/synch.h
+index ac3714b..5d3281d 100644
+--- a/kern/include/synch.h
++++ b/kern/include/synch.h
+@@ -1,156 +1,172 @@
+-/*
+- * Copyright (c) 2000, 2001, 2002, 2003, 2004, 2005, 2008, 2009
+- *	The President and Fellows of Harvard College.
+- *
+- * Redistribution and use in source and binary forms, with or without
+- * modification, are permitted provided that the following conditions
+- * are met:
+- * 1. Redistributions of source code must retain the above copyright
+- *    notice, this list of conditions and the following disclaimer.
+- * 2. Redistributions in binary form must reproduce the above copyright
+- *    notice, this list of conditions and the following disclaimer in the
+- *    documentation and/or other materials provided with the distribution.
+- * 3. Neither the name of the University nor the names of its contributors
+- *    may be used to endorse or promote products derived from this software
+- *    without specific prior written permission.
+- *
+- * THIS SOFTWARE IS PROVIDED BY THE UNIVERSITY AND CONTRIBUTORS ``AS IS'' AND
+- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+- * ARE DISCLAIMED.  IN NO EVENT SHALL THE UNIVERSITY OR CONTRIBUTORS BE LIABLE
+- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+- * SUCH DAMAGE.
+- */
+-
+-#ifndef _SYNCH_H_
+-#define _SYNCH_H_
+-
+-/*
+- * Header file for synchronization primitives.
+- */
+-
+-
+-#include <spinlock.h>
+-
+-/*
+- * Dijkstra-style semaphore.
+- *
+- * The name field is for easier debugging. A copy of the name is made
+- * internally.
+- */
+-struct semaphore {
+-        char *sem_name;
+-	struct wchan *sem_wchan;
+-	struct spinlock sem_lock;
+-        volatile int sem_count;
+-};
+-
+-struct semaphore *sem_create(const char *name, int initial_count);
+-void sem_destroy(struct semaphore *);
+-
+-/*
+- * Operations (both atomic):
+- *     P (proberen): decrement count. If the count is 0, block until
+- *                   the count is 1 again before decrementing.
+- *     V (verhogen): increment count.
+- */
+-void P(struct semaphore *);
+-void V(struct semaphore *);
+-
+-
+-/*
+- * Simple lock for mutual exclusion.
+- *
+- * When the lock is created, no thread should be holding it. Likewise,
+- * when the lock is destroyed, no thread should be holding it.
+- *
+- * The name field is for easier debugging. A copy of the name is
+- * (should be) made internally.
+- */
+-struct lock {
+-        char *lk_name;
+-        // add what you need here
+-        // (don't forget to mark things volatile as needed)
+-};
+-
+-struct lock *lock_create(const char *name);
+-void lock_acquire(struct lock *);
+-
+-/*
+- * Operations:
+- *    lock_acquire - Get the lock. Only one thread can hold the lock at the
+- *                   same time.
+- *    lock_release - Free the lock. Only the thread holding the lock may do
+- *                   this.
+- *    lock_do_i_hold - Return true if the current thread holds the lock; 
+- *                   false otherwise.
+- *
+- * These operations must be atomic. You get to write them.
+- */
+-void lock_release(struct lock *);
+-bool lock_do_i_hold(struct lock *);
+-void lock_destroy(struct lock *);
+-
+-
+-/*
+- * Condition variable.
+- *
+- * Note that the "variable" is a bit of a misnomer: a CV is normally used
+- * to wait until a variable meets a particular condition, but there's no
+- * actual variable, as such, in the CV.
+- *
+- * These CVs are expected to support Mesa semantics, that is, no
+- * guarantees are made about scheduling.
+- *
+- * The name field is for easier debugging. A copy of the name is
+- * (should be) made internally.
+- */
+-
+-struct cv {
+-        char *cv_name;
+-        // add what you need here
+-        // (don't forget to mark things volatile as needed)
+-};
+-
+-struct cv *cv_create(const char *name);
+-void cv_destroy(struct cv *);
+-
+-/*
+- * Operations:
+- *    cv_wait      - Release the supplied lock, go to sleep, and, after
+- *                   waking up again, re-acquire the lock.
+- *    cv_signal    - Wake up one thread that's sleeping on this CV.
+- *    cv_broadcast - Wake up all threads sleeping on this CV.
+- *
+- * For all three operations, the current thread must hold the lock passed 
+- * in. Note that under normal circumstances the same lock should be used
+- * on all operations with any particular CV.
+- *
+- * These operations must be atomic. You get to write them.
+- */
+-void cv_wait(struct cv *cv, struct lock *lock);
+-void cv_signal(struct cv *cv, struct lock *lock);
+-void cv_broadcast(struct cv *cv, struct lock *lock);
+-
+-/*
+- * 13 Feb 2012 : GWA : Reader-writer locks.
+- */
+-
+-struct rwlock {
+-        char *rwlock_name;
+-};
+-
+-struct rwlock * rwlock_create(const char *);
+-void rwlock_destroy(struct rwlock *);
+-
+-void rwlock_acquire_read(struct rwlock *);
+-void rwlock_release_read(struct rwlock *);
+-void rwlock_acquire_write(struct rwlock *);
+-void rwlock_release_write(struct rwlock *);
+-
+-#endif /* _SYNCH_H_ */
++/*
++ * Copyright (c) 2000, 2001, 2002, 2003, 2004, 2005, 2008, 2009
++ *	The President and Fellows of Harvard College.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ * 3. Neither the name of the University nor the names of its contributors
++ *    may be used to endorse or promote products derived from this software
++ *    without specific prior written permission.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE UNIVERSITY AND CONTRIBUTORS ``AS IS'' AND
++ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED.  IN NO EVENT SHALL THE UNIVERSITY OR CONTRIBUTORS BE LIABLE
++ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
++ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
++ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
++ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
++ * SUCH DAMAGE.
++ */
++
++#ifndef _SYNCH_H_
++#define _SYNCH_H_
++
++/*
++ * Header file for synchronization primitives.
++ */
++
++#include <types.h>
++#include <spinlock.h>
++
++/*
++ * Dijkstra-style semaphore.
++ *
++ * The name field is for easier debugging. A copy of the name is made
++ * internally.
++ */
++struct semaphore {
++        char *sem_name;
++	struct wchan *sem_wchan;
++	struct spinlock sem_lock;
++        volatile int sem_count;
++};
++
++struct semaphore *sem_create(const char *name, int initial_count);
++void sem_destroy(struct semaphore *);
++
++/*
++ * Operations (both atomic):
++ *     P (proberen): decrement count. If the count is 0, block until
++ *                   the count is 1 again before decrementing.
++ *     V (verhogen): increment count.
++ */
++void P(struct semaphore *);
++void V(struct semaphore *);
++
++
++/*
++ * Simple lock for mutual exclusion.
++ *
++ * When the lock is created, no thread should be holding it. Likewise,
++ * when the lock is destroyed, no thread should be holding it.
++ *
++ * The name field is for easier debugging. A copy of the name is
++ * (should be) made internally.
++ */
++struct lock {
++        char *lk_name;
++        struct thread *lk_holder;
++        struct wchan *lk_wchan;
++       	struct spinlock lk_lock;
++};
++
++struct lock *lock_create(const char *name);
++void lock_acquire(struct lock *);
++
++/*
++ * Operations:
++ *    lock_acquire - Get the lock. Only one thread can hold the lock at the
++ *                   same time.
++ *    lock_release - Free the lock. Only the thread holding the lock may do
++ *                   this.
++ *    lock_do_i_hold - Return true if the current thread holds the lock; 
++ *                   false otherwise.
++ *
++ * These operations must be atomic. You get to write them.
++ */
++void lock_release(struct lock *);
++bool lock_do_i_hold(struct lock *);
++void lock_destroy(struct lock *);
++
++
++/*
++ * Condition variable.
++ *
++ * Note that the "variable" is a bit of a misnomer: a CV is normally used
++ * to wait until a variable meets a particular condition, but there's no
++ * actual variable, as such, in the CV.
++ *
++ * These CVs are expected to support Mesa semantics, that is, no
++ * guarantees are made about scheduling.
++ *
++ * The name field is for easier debugging. A copy of the name is
++ * (should be) made internally.
++ */
++
++struct cv {
++        char *cv_name;
++        struct wchan *cv_wchan;
++};
++
++struct cv *cv_create(const char *name);
++void cv_destroy(struct cv *);
++
++/*
++ * Operations:
++ *    cv_wait      - Release the supplied lock, go to sleep, and, after
++ *                   waking up again, re-acquire the lock.
++ *    cv_signal    - Wake up one thread that's sleeping on this CV.
++ *    cv_broadcast - Wake up all threads sleeping on this CV.
++ *
++ * For all three operations, the current thread must hold the lock passed 
++ * in. Note that under normal circumstances the same lock should be used
++ * on all operations with any particular CV.
++ *
++ * These operations must be atomic. You get to write them.
++ */
++void cv_wait(struct cv *cv, struct lock *lock);
++void cv_signal(struct cv *cv, struct lock *lock);
++void cv_broadcast(struct cv *cv, struct lock *lock);
++
++/*
++ * 13 Feb 2012 : GWA : Reader-writer locks.
++ */
++
++#define RW_MODE_READ 0
++#define RW_MODE_WRITES_WAITING 1
++#define RW_MODE_WRITE 2
++#define RW_MIN_READ_THREADS 4
++
++struct rwlock {
++        char *rwlock_name;
++
++        struct wchan *rwlock_rd_wchan;
++        struct wchan *rwlock_wr_wchan;
++
++       	volatile int rwlock_rdlk_count;
++        volatile int rwlock_wrlk_count;
++
++        struct spinlock rwlock_lock;
++
++        uint8_t rwlock_mode;
++        uint8_t rwlock_rd_threads_serviced;
++};
++
++struct rwlock * rwlock_create(const char *);
++void rwlock_destroy(struct rwlock *);
++
++void rwlock_acquire_read(struct rwlock *);
++void rwlock_release_read(struct rwlock *);
++void rwlock_acquire_write(struct rwlock *);
++void rwlock_release_write(struct rwlock *);
++
++#endif /* _SYNCH_H_ */
+diff --git a/kern/include/test.h b/kern/include/test.h
+index 240d583..8a195ac 100644
+--- a/kern/include/test.h
++++ b/kern/include/test.h
+@@ -90,6 +90,7 @@ int semtest(int, char **);
+ int locktest(int, char **);
+ int cvtest(int, char **);
+ int cvtest2(int, char **);
++int rwlocktest(int, char **);
+ 
+ /* filesystem tests */
+ int fstest(int, char **);
+diff --git a/kern/startup/main.c b/kern/startup/main.c
+index be4c4b8..4c4f3c8 100644
+--- a/kern/startup/main.c
++++ b/kern/startup/main.c
+@@ -1,3 +1,5 @@
++/* Comment added by arindamn@buffalo.edu */
++
+ /*
+  * Copyright (c) 2000, 2001, 2002, 2003, 2004, 2005, 2008, 2009
+  *	The President and Fellows of Harvard College.
+@@ -100,7 +102,7 @@ boot(void)
+ 	kprintf("%s", harvard_copyright);
+ 	kprintf("\n");
+ 
+-	kprintf("Put-your-group-name-here's system version %s (%s #%d)\n", 
++	kprintf("Kernel Panic's system version %s (%s #%d)\n", 
+ 		GROUP_VERSION, buildconfig, buildversion);
+ 	kprintf("\n");
+ 
+diff --git a/kern/startup/menu.c b/kern/startup/menu.c
+index 6c71551..28a045f 100644
+--- a/kern/startup/menu.c
++++ b/kern/startup/menu.c
+@@ -449,6 +449,7 @@ static const char *testmenu[] = {
+ 	"[sy1] Semaphore test                ",
+ 	"[sy2] Lock test             (1)     ",
+ 	"[sy3] CV test               (1)     ",
++	"[sy4] RW Lock test                  ",
+ 	"[sy5] CV test 2             (1)     ",
+ 	"[sp1] Whalematching Driver  (1)     ",
+ 	"[sp2] Stoplight Driver      (1)     ",
+@@ -546,6 +547,7 @@ static struct {
+ 	/* synchronization assignment tests */
+ 	{ "sy2",	locktest },
+ 	{ "sy3",	cvtest },
++	{ "sy4",	rwlocktest },
+ 	{ "sy5",	cvtest2 },
+ 	
+ #if OPT_SYNCHPROBS
+diff --git a/kern/synchprobs/problems.c b/kern/synchprobs/problems.c
+index 81d2f0e..d1154f5 100644
+--- a/kern/synchprobs/problems.c
++++ b/kern/synchprobs/problems.c
+@@ -47,7 +47,14 @@
+ // functions will allow you to do local initialization. They are called at
+ // the top of the corresponding driver code.
+ 
++struct semaphore *whl_male;
++struct semaphore *whl_female;
++struct semaphore *whl_matchmkr;
++
+ void whalemating_init() {
++	whl_male = sem_create("male_whale", 0);
++	whl_female = sem_create("female_whale", 0);
++	whl_matchmkr = sem_create("matchmaker_whale", 0);
+   return;
+ }
+ 
+@@ -55,6 +62,9 @@ void whalemating_init() {
+ // care if your problems leak memory, but if you do, use this to clean up.
+ 
+ void whalemating_cleanup() {
++	sem_destroy(whl_male);
++	sem_destroy(whl_female);
++	sem_destroy(whl_matchmkr);
+   return;
+ }
+ 
+@@ -66,6 +76,7 @@ male(void *p, unsigned long which)
+   
+   male_start();
+ 	// Implement this function 
++  P(whl_male);
+   male_end();
+ 
+   // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
+@@ -82,6 +93,7 @@ female(void *p, unsigned long which)
+   
+   female_start();
+ 	// Implement this function 
++  P(whl_female);
+   female_end();
+   
+   // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
+@@ -98,6 +110,10 @@ matchmaker(void *p, unsigned long which)
+   
+   matchmaker_start();
+ 	// Implement this function 
++  V(whl_male);
++  V(whl_female);
++  V(whl_matchmkr);
++  P(whl_matchmkr);
+   matchmaker_end();
+   
+   // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
+diff --git a/kern/test/synchtest.c b/kern/test/synchtest.c
+index d072469..d5ddef1 100644
+--- a/kern/test/synchtest.c
++++ b/kern/test/synchtest.c
+@@ -50,6 +50,7 @@ static struct semaphore *testsem;
+ static struct lock *testlock;
+ static struct cv *testcv;
+ static struct semaphore *donesem;
++static struct rwlock *rw;
+ 
+ static
+ void
+@@ -79,6 +80,12 @@ inititems(void)
+ 			panic("synchtest: sem_create failed\n");
+ 		}
+ 	}
++	if (rw==NULL) {
++		rw = rwlock_create("rwlock");
++		if (rw == NULL) {
++			panic("synchtest: rwlock_create failed\n");
++		}
++	}
+ }
+ 
+ static
+@@ -357,3 +364,68 @@ cvtest2(int nargs, char **args)
+ 
+ 	return 0;
+ }
++
++
++
++volatile int rwtestval = 7;
++
++static
++void
++rwtestthread(void *junk, unsigned long num)
++{
++	(void)junk;
++
++	bool writer = false;
++
++	if((num+1) % 4 == 0)
++		writer = true;
++
++	if(writer) {
++		rwlock_acquire_write(rw);
++		rwtestval--;
++		kprintf("Writer thread %lu decrementing value to %d\n", num, rwtestval);
++		thread_yield();
++		rwlock_release_write(rw);
++	}
++	else {
++		rwlock_acquire_read(rw);
++		kprintf("Reader thread %lu reads value %d\n", num, rwtestval);
++		rwlock_release_read(rw);
++	}
++
++	V(donesem);
++}
++
++int
++rwlocktest(int nargs, char **args)
++{
++	int i, result;
++
++	(void)nargs;
++	(void)args;
++
++	inititems();
++
++	kprintf("Starting RW Lock test...\n");
++
++	for (i=0; i<NTHREADS; i++) {
++		if(i%4 == 0)
++			result = thread_fork("writer", rwtestthread, NULL, i, NULL);
++		else
++			result = thread_fork("reader", rwtestthread, NULL, i, NULL);
++
++		if (result) {
++			panic("rwtest: thread_fork failed: %s\n",
++				  strerror(result));
++		}
++	}
++
++	for (i=0; i<NTHREADS; i++) {
++		P(donesem);
++	}
++
++	kprintf("RW test done\n");
++
++	return 0;
++
++}
+diff --git a/kern/thread/synch.c b/kern/thread/synch.c
+index 9a7468c..e3f0682 100644
+--- a/kern/thread/synch.c
++++ b/kern/thread/synch.c
+@@ -1,267 +1,454 @@
+-/*
+- * Copyright (c) 2000, 2001, 2002, 2003, 2004, 2005, 2008, 2009
+- *	The President and Fellows of Harvard College.
+- *
+- * Redistribution and use in source and binary forms, with or without
+- * modification, are permitted provided that the following conditions
+- * are met:
+- * 1. Redistributions of source code must retain the above copyright
+- *    notice, this list of conditions and the following disclaimer.
+- * 2. Redistributions in binary form must reproduce the above copyright
+- *    notice, this list of conditions and the following disclaimer in the
+- *    documentation and/or other materials provided with the distribution.
+- * 3. Neither the name of the University nor the names of its contributors
+- *    may be used to endorse or promote products derived from this software
+- *    without specific prior written permission.
+- *
+- * THIS SOFTWARE IS PROVIDED BY THE UNIVERSITY AND CONTRIBUTORS ``AS IS'' AND
+- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+- * ARE DISCLAIMED.  IN NO EVENT SHALL THE UNIVERSITY OR CONTRIBUTORS BE LIABLE
+- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+- * SUCH DAMAGE.
+- */
+-
+-/*
+- * Synchronization primitives.
+- * The specifications of the functions are in synch.h.
+- */
+-
+-#include <types.h>
+-#include <lib.h>
+-#include <spinlock.h>
+-#include <wchan.h>
+-#include <thread.h>
+-#include <current.h>
+-#include <synch.h>
+-
+-////////////////////////////////////////////////////////////
+-//
+-// Semaphore.
+-
+-struct semaphore *
+-sem_create(const char *name, int initial_count)
+-{
+-        struct semaphore *sem;
+-
+-        KASSERT(initial_count >= 0);
+-
+-        sem = kmalloc(sizeof(struct semaphore));
+-        if (sem == NULL) {
+-                return NULL;
+-        }
+-
+-        sem->sem_name = kstrdup(name);
+-        if (sem->sem_name == NULL) {
+-                kfree(sem);
+-                return NULL;
+-        }
+-
+-	sem->sem_wchan = wchan_create(sem->sem_name);
+-	if (sem->sem_wchan == NULL) {
+-		kfree(sem->sem_name);
+-		kfree(sem);
+-		return NULL;
+-	}
+-
+-	spinlock_init(&sem->sem_lock);
+-        sem->sem_count = initial_count;
+-
+-        return sem;
+-}
+-
+-void
+-sem_destroy(struct semaphore *sem)
+-{
+-        KASSERT(sem != NULL);
+-
+-	/* wchan_cleanup will assert if anyone's waiting on it */
+-	spinlock_cleanup(&sem->sem_lock);
+-	wchan_destroy(sem->sem_wchan);
+-        kfree(sem->sem_name);
+-        kfree(sem);
+-}
+-
+-void 
+-P(struct semaphore *sem)
+-{
+-        KASSERT(sem != NULL);
+-
+-        /*
+-         * May not block in an interrupt handler.
+-         *
+-         * For robustness, always check, even if we can actually
+-         * complete the P without blocking.
+-         */
+-        KASSERT(curthread->t_in_interrupt == false);
+-
+-	spinlock_acquire(&sem->sem_lock);
+-        while (sem->sem_count == 0) {
+-		/*
+-		 * Bridge to the wchan lock, so if someone else comes
+-		 * along in V right this instant the wakeup can't go
+-		 * through on the wchan until we've finished going to
+-		 * sleep. Note that wchan_sleep unlocks the wchan.
+-		 *
+-		 * Note that we don't maintain strict FIFO ordering of
+-		 * threads going through the semaphore; that is, we
+-		 * might "get" it on the first try even if other
+-		 * threads are waiting. Apparently according to some
+-		 * textbooks semaphores must for some reason have
+-		 * strict ordering. Too bad. :-)
+-		 *
+-		 * Exercise: how would you implement strict FIFO
+-		 * ordering?
+-		 */
+-		wchan_lock(sem->sem_wchan);
+-		spinlock_release(&sem->sem_lock);
+-                wchan_sleep(sem->sem_wchan);
+-
+-		spinlock_acquire(&sem->sem_lock);
+-        }
+-        KASSERT(sem->sem_count > 0);
+-        sem->sem_count--;
+-	spinlock_release(&sem->sem_lock);
+-}
+-
+-void
+-V(struct semaphore *sem)
+-{
+-        KASSERT(sem != NULL);
+-
+-	spinlock_acquire(&sem->sem_lock);
+-
+-        sem->sem_count++;
+-        KASSERT(sem->sem_count > 0);
+-	wchan_wakeone(sem->sem_wchan);
+-
+-	spinlock_release(&sem->sem_lock);
+-}
+-
+-////////////////////////////////////////////////////////////
+-//
+-// Lock.
+-
+-struct lock *
+-lock_create(const char *name)
+-{
+-        struct lock *lock;
+-
+-        lock = kmalloc(sizeof(struct lock));
+-        if (lock == NULL) {
+-                return NULL;
+-        }
+-
+-        lock->lk_name = kstrdup(name);
+-        if (lock->lk_name == NULL) {
+-                kfree(lock);
+-                return NULL;
+-        }
+-        
+-        // add stuff here as needed
+-        
+-        return lock;
+-}
+-
+-void
+-lock_destroy(struct lock *lock)
+-{
+-        KASSERT(lock != NULL);
+-
+-        // add stuff here as needed
+-        
+-        kfree(lock->lk_name);
+-        kfree(lock);
+-}
+-
+-void
+-lock_acquire(struct lock *lock)
+-{
+-        // Write this
+-
+-        (void)lock;  // suppress warning until code gets written
+-}
+-
+-void
+-lock_release(struct lock *lock)
+-{
+-        // Write this
+-
+-        (void)lock;  // suppress warning until code gets written
+-}
+-
+-bool
+-lock_do_i_hold(struct lock *lock)
+-{
+-        // Write this
+-
+-        (void)lock;  // suppress warning until code gets written
+-
+-        return true; // dummy until code gets written
+-}
+-
+-////////////////////////////////////////////////////////////
+-//
+-// CV
+-
+-
+-struct cv *
+-cv_create(const char *name)
+-{
+-        struct cv *cv;
+-
+-        cv = kmalloc(sizeof(struct cv));
+-        if (cv == NULL) {
+-                return NULL;
+-        }
+-
+-        cv->cv_name = kstrdup(name);
+-        if (cv->cv_name==NULL) {
+-                kfree(cv);
+-                return NULL;
+-        }
+-        
+-        // add stuff here as needed
+-        
+-        return cv;
+-}
+-
+-void
+-cv_destroy(struct cv *cv)
+-{
+-        KASSERT(cv != NULL);
+-
+-        // add stuff here as needed
+-        
+-        kfree(cv->cv_name);
+-        kfree(cv);
+-}
+-
+-void
+-cv_wait(struct cv *cv, struct lock *lock)
+-{
+-        // Write this
+-        (void)cv;    // suppress warning until code gets written
+-        (void)lock;  // suppress warning until code gets written
+-}
+-
+-void
+-cv_signal(struct cv *cv, struct lock *lock)
+-{
+-        // Write this
+-	(void)cv;    // suppress warning until code gets written
+-	(void)lock;  // suppress warning until code gets written
+-}
+-
+-void
+-cv_broadcast(struct cv *cv, struct lock *lock)
+-{
+-	// Write this
+-	(void)cv;    // suppress warning until code gets written
+-	(void)lock;  // suppress warning until code gets written
+-}
++/*
++ * Copyright (c) 2000, 2001, 2002, 2003, 2004, 2005, 2008, 2009
++ *	The President and Fellows of Harvard College.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ * 3. Neither the name of the University nor the names of its contributors
++ *    may be used to endorse or promote products derived from this software
++ *    without specific prior written permission.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE UNIVERSITY AND CONTRIBUTORS ``AS IS'' AND
++ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED.  IN NO EVENT SHALL THE UNIVERSITY OR CONTRIBUTORS BE LIABLE
++ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
++ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
++ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
++ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
++ * SUCH DAMAGE.
++ */
++
++/*
++ * Synchronization primitives.
++ * The specifications of the functions are in synch.h.
++ */
++
++#include <types.h>
++#include <lib.h>
++#include <spinlock.h>
++#include <wchan.h>
++#include <thread.h>
++#include <current.h>
++#include <synch.h>
++
++////////////////////////////////////////////////////////////
++//
++// Semaphore.
++
++struct semaphore *
++sem_create(const char *name, int initial_count)
++{
++        struct semaphore *sem;
++
++        KASSERT(initial_count >= 0);
++
++        sem = kmalloc(sizeof(struct semaphore));
++        if (sem == NULL) {
++                return NULL;
++        }
++
++        sem->sem_name = kstrdup(name);
++        if (sem->sem_name == NULL) {
++                kfree(sem);
++                return NULL;
++        }
++
++	sem->sem_wchan = wchan_create(sem->sem_name);
++	if (sem->sem_wchan == NULL) {
++		kfree(sem->sem_name);
++		kfree(sem);
++		return NULL;
++	}
++
++	spinlock_init(&sem->sem_lock);
++        sem->sem_count = initial_count;
++
++        return sem;
++}
++
++void
++sem_destroy(struct semaphore *sem)
++{
++        KASSERT(sem != NULL);
++
++	/* wchan_cleanup will assert if anyone's waiting on it */
++	spinlock_cleanup(&sem->sem_lock);
++	wchan_destroy(sem->sem_wchan);
++        kfree(sem->sem_name);
++        kfree(sem);
++}
++
++void 
++P(struct semaphore *sem)
++{
++        KASSERT(sem != NULL);
++
++        /*
++         * May not block in an interrupt handler.
++         *
++         * For robustness, always check, even if we can actually
++         * complete the P without blocking.
++         */
++        KASSERT(curthread->t_in_interrupt == false);
++
++	spinlock_acquire(&sem->sem_lock);
++        while (sem->sem_count == 0) {
++		/*
++		 * Bridge to the wchan lock, so if someone else comes
++		 * along in V right this instant the wakeup can't go
++		 * through on the wchan until we've finished going to
++		 * sleep. Note that wchan_sleep unlocks the wchan.
++		 *
++		 * Note that we don't maintain strict FIFO ordering of
++		 * threads going through the semaphore; that is, we
++		 * might "get" it on the first try even if other
++		 * threads are waiting. Apparently according to some
++		 * textbooks semaphores must for some reason have
++		 * strict ordering. Too bad. :-)
++		 *
++		 * Exercise: how would you implement strict FIFO
++		 * ordering?
++		 */
++		wchan_lock(sem->sem_wchan);
++		spinlock_release(&sem->sem_lock);
++                wchan_sleep(sem->sem_wchan);
++
++		spinlock_acquire(&sem->sem_lock);
++        }
++        KASSERT(sem->sem_count > 0);
++        sem->sem_count--;
++	spinlock_release(&sem->sem_lock);
++}
++
++void
++V(struct semaphore *sem)
++{
++        KASSERT(sem != NULL);
++
++	spinlock_acquire(&sem->sem_lock);
++
++        sem->sem_count++;
++        KASSERT(sem->sem_count > 0);
++	wchan_wakeone(sem->sem_wchan);
++
++	spinlock_release(&sem->sem_lock);
++}
++
++////////////////////////////////////////////////////////////
++//
++// Lock.
++
++struct lock *
++lock_create(const char *name)
++{
++        struct lock *lock;
++
++        lock = kmalloc(sizeof(struct lock));
++        if (lock == NULL) {
++                return NULL;
++        }
++
++        lock->lk_name = kstrdup(name);
++        if (lock->lk_name == NULL) {
++                kfree(lock);
++                return NULL;
++        }
++
++		lock->lk_wchan = wchan_create(lock->lk_name);
++		if (lock->lk_wchan == NULL) {
++			kfree(lock->lk_name);
++			kfree(lock);
++			return NULL;
++		}
++
++		lock->lk_holder = NULL;
++
++		spinlock_init(&lock->lk_lock);
++
++        return lock;
++}
++
++void
++lock_destroy(struct lock *lock)
++{
++        KASSERT(lock != NULL);
++        KASSERT(lock->lk_holder == NULL);
++
++        /* wchan_cleanup will assert if anyone's waiting on it */
++       	spinlock_cleanup(&lock->lk_lock);
++     	wchan_destroy(lock->lk_wchan);
++        kfree(lock->lk_name);
++        kfree(lock);
++}
++
++void
++lock_acquire(struct lock *lock)
++{
++		KASSERT(lock != NULL);
++		KASSERT(curthread->t_in_interrupt == false);
++		KASSERT(!lock_do_i_hold(lock));
++
++		spinlock_acquire(&lock->lk_lock);
++        while (lock->lk_holder != NULL) {
++			wchan_lock(lock->lk_wchan);
++			spinlock_release(&lock->lk_lock);
++		    wchan_sleep(lock->lk_wchan);
++
++			spinlock_acquire(&lock->lk_lock);
++        }
++
++	    lock->lk_holder = curthread;
++	    KASSERT(lock_do_i_hold(lock));
++		spinlock_release(&lock->lk_lock);
++
++}
++
++void
++lock_release(struct lock *lock)
++{
++    	KASSERT(lock != NULL);
++
++    	spinlock_acquire(&lock->lk_lock);
++
++    	KASSERT(lock_do_i_hold(lock));
++    	lock->lk_holder = NULL;
++
++    	wchan_wakeone(lock->lk_wchan);
++
++    	spinlock_release(&lock->lk_lock);
++}
++
++bool
++lock_do_i_hold(struct lock *lock)
++{
++        if(lock->lk_holder == NULL)
++        	return false;
++        else if(lock->lk_holder == curthread)
++        	return true;
++
++        return false;
++}
++
++////////////////////////////////////////////////////////////
++//
++// CV
++
++
++struct cv *
++cv_create(const char *name)
++{
++        struct cv *cv;
++
++        cv = kmalloc(sizeof(struct cv));
++        if (cv == NULL) {
++                return NULL;
++        }
++
++        cv->cv_name = kstrdup(name);
++        if (cv->cv_name==NULL) {
++                kfree(cv);
++                return NULL;
++        }
++
++        cv->cv_wchan = wchan_create(cv->cv_name);
++        return cv;
++}
++
++void
++cv_destroy(struct cv *cv)
++{
++        KASSERT(cv != NULL);
++
++        wchan_destroy(cv->cv_wchan);
++        kfree(cv->cv_name);
++        kfree(cv);
++}
++
++void
++cv_wait(struct cv *cv, struct lock *lock)
++{
++		wchan_lock(cv->cv_wchan);
++		lock_release(lock);
++		wchan_sleep(cv->cv_wchan);
++		lock_acquire(lock);
++}
++
++void
++cv_signal(struct cv *cv, struct lock *lock)
++{
++		wchan_wakeone(cv->cv_wchan);
++		(void)lock;
++}
++
++void
++cv_broadcast(struct cv *cv, struct lock *lock)
++{
++		wchan_wakeall(cv->cv_wchan);
++		(void)lock;
++}
++
++/*
++ *
++ *
++ * RW Lock Implementation
++ *
++ *
++ */
++
++struct rwlock *
++rwlock_create(const char *name)
++{
++    struct rwlock *rw;
++
++    rw = kmalloc(sizeof(struct rwlock));
++    if (rw == NULL) {
++            return NULL;
++    }
++
++    rw->rwlock_name = kstrdup(name);
++    if (rw->rwlock_name == NULL) {
++            kfree(rw);
++            return NULL;
++    }
++
++	rw->rwlock_rd_wchan = wchan_create(strcat(rw->rwlock_name, "_read"));
++	if (rw->rwlock_rd_wchan == NULL) {
++		kfree(rw->rwlock_name);
++		kfree(rw);
++		return NULL;
++	}
++
++	rw->rwlock_wr_wchan = wchan_create(strcat(rw->rwlock_name, "_write"));
++	if (rw->rwlock_wr_wchan == NULL) {
++		kfree(rw->rwlock_rd_wchan);
++		kfree(rw->rwlock_name);
++		kfree(rw);
++		return NULL;
++	}
++
++	spinlock_init(&rw->rwlock_lock);
++
++    rw->rwlock_rdlk_count = 0;
++    rw->rwlock_wrlk_count = 1;
++
++    rw->rwlock_mode = RW_MODE_READ;
++    rw->rwlock_rd_threads_serviced = 0;
++
++    return rw;
++}
++
++void
++rwlock_destroy(struct rwlock *rw)
++{
++	KASSERT(rw->rwlock_wrlk_count == 1);
++	KASSERT(rw->rwlock_rdlk_count == 6);
++
++	spinlock_cleanup(&rw->rwlock_lock);
++
++	wchan_destroy(rw->rwlock_rd_wchan);
++	wchan_destroy(rw->rwlock_wr_wchan);
++
++	kfree(rw->rwlock_name);
++    kfree(rw);
++}
++
++void
++rwlock_acquire_read(struct rwlock *rw)
++{
++	spinlock_acquire(&rw->rwlock_lock);
++
++	while(rw->rwlock_mode == RW_MODE_WRITES_WAITING &&
++			rw->rwlock_rd_threads_serviced > RW_MIN_READ_THREADS) {
++		wchan_lock(rw->rwlock_rd_wchan);
++		spinlock_release(&rw->rwlock_lock);
++		wchan_sleep(rw->rwlock_rd_wchan);
++
++		spinlock_acquire(&rw->rwlock_lock);
++	}
++
++	while(rw->rwlock_mode == RW_MODE_WRITE) {
++		wchan_lock(rw->rwlock_rd_wchan);
++		spinlock_release(&rw->rwlock_lock);
++		wchan_sleep(rw->rwlock_rd_wchan);
++
++		spinlock_acquire(&rw->rwlock_lock);
++	}
++
++	rw->rwlock_rdlk_count++;
++	rw->rwlock_rd_threads_serviced++;
++
++	spinlock_release(&rw->rwlock_lock);
++
++}
++
++void
++rwlock_release_read(struct rwlock *rw)
++{
++	spinlock_acquire(&rw->rwlock_lock);
++
++	rw->rwlock_rdlk_count--;
++	KASSERT(rw->rwlock_rdlk_count >= 0);
++
++	if(rw->rwlock_mode == RW_MODE_WRITES_WAITING && rw->rwlock_rdlk_count == 0)
++		wchan_wakeone(rw->rwlock_wr_wchan);
++
++	spinlock_release(&rw->rwlock_lock);
++}
++
++void
++rwlock_acquire_write(struct rwlock *rw)
++{
++	spinlock_acquire(&rw->rwlock_lock);
++
++	rw->rwlock_mode = RW_MODE_WRITES_WAITING;
++
++	while(rw->rwlock_rdlk_count != 0 || rw->rwlock_wrlk_count == 0) {
++		wchan_lock(rw->rwlock_wr_wchan);
++		spinlock_release(&rw->rwlock_lock);
++		wchan_sleep(rw->rwlock_wr_wchan);
++
++		spinlock_acquire(&rw->rwlock_lock);
++	}
++
++	KASSERT(rw->rwlock_wrlk_count == 1);
++	rw->rwlock_mode = RW_MODE_WRITE;
++	rw->rwlock_wrlk_count--;
++
++	KASSERT(rw->rwlock_wrlk_count == 0);
++
++	spinlock_release(&rw->rwlock_lock);
++}
++
++void
++rwlock_release_write(struct rwlock *rw)
++{
++	spinlock_acquire(&rw->rwlock_lock);
++
++	KASSERT(rw->rwlock_wrlk_count == 0);
++	rw->rwlock_wrlk_count++;
++	KASSERT(rw->rwlock_wrlk_count == 1);
++
++	rw->rwlock_rd_threads_serviced = 0;
++	if(!wchan_isempty(rw->rwlock_wr_wchan)) {
++		rw->rwlock_mode = RW_MODE_WRITES_WAITING;
++	}
++	else {
++		rw->rwlock_mode = RW_MODE_READ;
++	}
++
++	if(!wchan_isempty(rw->rwlock_rd_wchan))
++		wchan_wakeall(rw->rwlock_rd_wchan);
++	else
++		wchan_wakeone(rw->rwlock_wr_wchan);
++
++	spinlock_release(&rw->rwlock_lock);
++}

@@ -36,6 +36,7 @@
 #include <current.h>
 #include <syscall.h>
 #include <addrspace.h>
+#include <file_syscalls.h>
 
 
 /*
@@ -82,6 +83,8 @@ syscall(struct trapframe *tf)
 	int callno;
 	int32_t retval;
 	int err;
+	int whence;
+	off_t pos, retval64;
 
 	KASSERT(curthread != NULL);
 	KASSERT(curthread->t_curspl == 0);
@@ -99,6 +102,9 @@ syscall(struct trapframe *tf)
 	 */
 
 	retval = 0;
+	whence = 0;
+	pos = 0;
+	retval64 = 0;
 
 	switch (callno) {
 	    case SYS_reboot:
@@ -120,6 +126,43 @@ syscall(struct trapframe *tf)
 	    err = sys_getpid(&retval);
 	    break;
 
+	    case SYS_open:
+	    	err = sys_open((char *)tf->tf_a0, tf->tf_a1, tf->tf_a2, &retval);
+	    	break;
+	    case SYS_close:
+	    	err = sys_close(tf->tf_a0, &retval);
+	    	break;
+	    case SYS_read:
+			err = sys_read(tf->tf_a0, (void *)tf->tf_a1, (size_t)tf->tf_a2, &retval);
+			break;
+	    case SYS_write:
+			err = sys_write(tf->tf_a0, (void *)tf->tf_a1, (size_t)tf->tf_a2, &retval);
+			break;
+	    case SYS_lseek:
+	    	pos = (off_t)((tf->tf_a2<<31) | (tf->tf_a3));
+/*	    	err = copyin((const_userptr_t)(tf->tf_sp + 16), &whence, (size_t)sizeof(whence));
+	    	if (err != 0) {
+	    		retval = err;
+	    		break;
+	    	}*/
+	    	whence = (int)tf->tf_sp + 16;
+	    	err = sys_lseek(tf->tf_a0, pos, whence, &retval64);
+	    	if (!err) {
+	    		uint32_t err32_high = (uint32_t)(retval64 >> 32);
+	    		uint32_t err32_low = (uint32_t)retval64;
+	    		tf->tf_v1 = err32_low;
+	    		retval = err32_high;
+	    	}
+			break;
+	    case SYS_chdir:
+			err = sys_chdir((const char *)tf->tf_a0, &retval);
+			break;
+	    case SYS_dup2:
+			err = sys_dup2(tf->tf_a0, tf->tf_a1, &retval);
+			break;
+	    case SYS___getcwd:
+			err = sys___getcwd((char *)tf->tf_a0, (size_t)tf->tf_a1, &retval);
+			break;
 	    default:
 		kprintf("Unknown syscall %d\n", callno);
 		err = ENOSYS;

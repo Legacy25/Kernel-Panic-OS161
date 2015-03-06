@@ -44,6 +44,57 @@
 #include <vfs.h>
 #include <syscall.h>
 #include <test.h>
+#include <kern/unistd.h>
+#include <file_syscalls.h>
+#include <synch.h>
+
+int file_desc_console_fd_init(void) {
+	struct vnode *vd_stdin, *vd_stdout, *vd_stderr;
+	char *path_name = NULL;
+	path_name = kstrdup("con:");
+
+	int res_stdin = 0, res_stdout = 0, res_stderr = 0;
+
+	//////////////////STDIN//////////////////
+	res_stdin = vfs_open(path_name, O_RDONLY, 0, &vd_stdin);
+	if (res_stdin) {
+		kfree(path_name);
+		return res_stdin;
+	}
+	curthread->fd_table[STDIN_FILENO] = (PFD)kmalloc(sizeof(PFD));
+	curthread->fd_table[STDIN_FILENO]->vd = vd_stdin;
+	curthread->fd_table[STDIN_FILENO]->flags = O_RDONLY;
+	curthread->fd_table[STDIN_FILENO]->offset = 0;
+	curthread->fd_table[STDIN_FILENO]->ref_count = 1;
+	curthread->fd_table[STDIN_FILENO]->fl_lock = lock_create(path_name);
+
+	//////////////////STDOUT//////////////////
+	res_stdout = vfs_open(path_name, O_WRONLY, 0, &vd_stdout);
+	if (res_stdout) {
+		kfree(path_name);
+		return res_stdout;
+	}
+	curthread->fd_table[STDOUT_FILENO] = (PFD)kmalloc(sizeof(PFD));
+	curthread->fd_table[STDOUT_FILENO]->vd = vd_stdout;
+	curthread->fd_table[STDOUT_FILENO]->flags = O_WRONLY;
+	curthread->fd_table[STDOUT_FILENO]->offset = 0;
+	curthread->fd_table[STDOUT_FILENO]->ref_count = 1;
+	curthread->fd_table[STDOUT_FILENO]->fl_lock = lock_create(path_name);
+
+	//////////////////STDERR//////////////////
+	res_stderr = vfs_open(path_name, O_WRONLY, 0, &vd_stderr);
+	if (res_stderr) {
+		kfree(path_name);
+		return res_stderr;
+	}
+	curthread->fd_table[STDERR_FILENO] = (PFD)kmalloc(sizeof(PFD));
+	curthread->fd_table[STDERR_FILENO]->vd = vd_stderr;
+	curthread->fd_table[STDERR_FILENO]->flags = O_WRONLY;
+	curthread->fd_table[STDERR_FILENO]->offset = 0;
+	curthread->fd_table[STDERR_FILENO]->ref_count = 1;
+	curthread->fd_table[STDERR_FILENO]->fl_lock = lock_create(path_name);
+	return 0;
+}
 
 /*
  * Load program "progname" and start running it in usermode.
@@ -72,6 +123,12 @@ runprogram(char *progname)
 	if (curthread->t_addrspace==NULL) {
 		vfs_close(v);
 		return ENOMEM;
+	}
+
+	/* Initialize STDIN, STDOUT and STDERR File Handles in the thread's file descriptor table*/
+	result = file_desc_console_fd_init();
+	if (result) {
+		return result;
 	}
 
 	/* Activate it. */
@@ -103,4 +160,3 @@ runprogram(char *progname)
 	panic("enter_new_process returned\n");
 	return EINVAL;
 }
-
